@@ -8,7 +8,7 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/profile_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
-import '../../features/home/screens/home_placeholder_screen.dart';
+import '../../features/reporting/screens/feed_screen.dart';
 import '../../features/reporting/screens/report_success_screen.dart';
 import '../../features/reporting/screens/submit_report_screen.dart';
 
@@ -68,7 +68,7 @@ GoRouter buildAppRouter() {
       ),
       GoRoute(
         path: AppRoutes.home,
-        builder: (_, _) => const HomePlaceholderScreen(),
+        builder: (_, _) => const FeedScreen(),
       ),
       GoRoute(
         path: AppRoutes.profile,
