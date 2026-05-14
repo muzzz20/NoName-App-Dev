@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,6 +9,7 @@ import '../../auth/services/auth_service.dart';
 import '../models/cat_report.dart';
 import '../services/reports_service.dart';
 import '../widgets/condition_badge.dart';
+import '../widgets/static_map.dart';
 
 /// Report Detail (NAD-13) — UC-07. Shows the full report with photo hero,
 /// status, condition, description, location (lat/lng + label), reporter,
@@ -163,7 +163,13 @@ class _DetailBody extends StatelessWidget {
                   label: 'Location',
                 ),
                 const SizedBox(height: AppSpacing.stackSm),
-                _MapPreview(location: r.location, label: r.locationLabel),
+                StaticMap(point: r.location),
+                const SizedBox(height: 6),
+                Text(
+                  '${r.location.latitude.toStringAsFixed(5)}, '
+                  '${r.location.longitude.toStringAsFixed(5)}',
+                  style: AppText.labelCaps.copyWith(color: AppColors.outline),
+                ),
                 const SizedBox(height: AppSpacing.stackLg),
 
                 Row(
@@ -208,45 +214,6 @@ class _SectionTitle extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: AppText.labelCaps),
       ],
-    );
-  }
-}
-
-class _MapPreview extends StatelessWidget {
-  final GeoPoint location;
-  final String? label;
-  const _MapPreview({required this.location, this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    // Static placeholder. Sprint 3 swaps this for google_maps_flutter.
-    return Container(
-      height: 140,
-      decoration: BoxDecoration(
-        color: AppColors.secondaryContainer,
-        borderRadius: AppRadius.cardRadius,
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.place, color: AppColors.onPrimary),
-          ),
-          const SizedBox(height: AppSpacing.stackSm),
-          Text(
-            '${location.latitude.toStringAsFixed(5)}, '
-            '${location.longitude.toStringAsFixed(5)}',
-            style: AppText.bodySm.copyWith(color: AppColors.primary),
-          ),
-        ],
-      ),
     );
   }
 }

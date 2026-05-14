@@ -12,6 +12,7 @@ import '../models/cat_report.dart';
 import '../services/location_service.dart';
 import '../services/photo_upload_service.dart';
 import '../services/reports_service.dart';
+import '../widgets/map_picker.dart';
 
 /// Submit Report screen — UC-05 / NAD-11.
 /// Matches `mockup-screens/report_cat_screen.png`.
@@ -223,6 +224,11 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                   onClear: _location == null
                       ? null
                       : () => setState(() => _location = null),
+                ),
+                const SizedBox(height: AppSpacing.stackSm),
+                MapPicker(
+                  point: _location,
+                  onChanged: (p) => setState(() => _location = p),
                 ),
                 const SizedBox(height: AppSpacing.stackLg),
 
