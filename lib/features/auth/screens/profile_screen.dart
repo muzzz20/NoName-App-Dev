@@ -144,25 +144,30 @@ class _MaroonHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'My Profile',
-                  style: AppText.bodyBase.copyWith(
-                    color: AppColors.onPrimary.withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w600,
+                _GlassIconButton(
+                  icon: Icons.chevron_left,
+                  onPressed: () => context.canPop()
+                      ? context.pop()
+                      : context.go(AppRoutes.home),
+                  tooltip: 'Back',
+                ),
+                const SizedBox(width: AppSpacing.stackSm),
+                Expanded(
+                  child: Text(
+                    'My Profile',
+                    style: AppText.bodyBase.copyWith(
+                      color: AppColors.onPrimary.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.onPrimary.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  padding: const EdgeInsets.all(AppSpacing.stackSm),
-                  child: const Icon(
-                    Icons.settings_outlined,
-                    color: AppColors.onPrimary,
-                  ),
+                _GlassIconButton(
+                  icon: Icons.settings_outlined,
+                  onPressed: () {
+                    // Sprint 4 (NAD-65) — Account Settings screen
+                  },
+                  tooltip: 'Settings',
                 ),
               ],
             ),
@@ -431,4 +436,34 @@ class _ProfileMissing extends StatelessWidget {
 /// file is reachable via go_router builders.
 class ProfileScreenRoute {
   static String get path => AppRoutes.profile;
+}
+
+/// Small circular icon button with a translucent on-primary background
+/// so it stays legible on the maroon header without competing with the
+/// content. Reused for back + settings affordances.
+class _GlassIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String tooltip;
+  const _GlassIconButton({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.onPrimary.withValues(alpha: 0.12),
+      shape: const CircleBorder(),
+      child: IconButton(
+        icon: Icon(icon, color: AppColors.onPrimary),
+        onPressed: onPressed,
+        tooltip: tooltip,
+        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
 }
