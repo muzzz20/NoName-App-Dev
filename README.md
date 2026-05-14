@@ -12,7 +12,7 @@
 ## Stack
 
 - **Frontend:** Flutter 3.41+ (Android / iOS / Web)
-- **Backend:** Firebase (Auth · Firestore · Storage · Cloud Messaging)
+- **Backend:** Firebase (Auth · Firestore · Cloud Messaging) + Supabase (object storage for photos)
 - **PM:** Jira (project `NAD`) + GitHub (linked commits)
 
 ## Prerequisites
