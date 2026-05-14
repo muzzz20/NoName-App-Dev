@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -76,14 +77,7 @@ class _ProfileBody extends StatelessWidget {
                 _MenuTile(
                   icon: Icons.history,
                   label: 'My Reports',
-                  onTap: () {
-                    // TODO(NAD-14): navigate to MyReportsScreen
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('My Reports screen lands with NAD-14'),
-                      ),
-                    );
-                  },
+                  onTap: () => context.go(AppRoutes.myReports),
                 ),
                 _MenuTile(
                   icon: Icons.handshake_outlined,

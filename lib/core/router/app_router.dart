@@ -9,6 +9,8 @@ import '../../features/auth/screens/profile_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/reporting/screens/feed_screen.dart';
+import '../../features/reporting/screens/my_reports_screen.dart';
+import '../../features/reporting/screens/report_detail_screen.dart';
 import '../../features/reporting/screens/report_success_screen.dart';
 import '../../features/reporting/screens/submit_report_screen.dart';
 
@@ -83,6 +85,15 @@ GoRouter buildAppRouter() {
         builder: (_, state) => ReportSuccessScreen(
           reportId: state.uri.queryParameters['id'],
         ),
+      ),
+      GoRoute(
+        path: '${AppRoutes.reportDetail}/:id',
+        builder: (_, state) =>
+            ReportDetailScreen(reportId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: AppRoutes.myReports,
+        builder: (_, _) => const MyReportsScreen(),
       ),
     ],
   );
