@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Strayfriends permissions (NAD-10) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Strayfriends needs camera access to capture photos of stray cats you want to report.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Strayfriends needs photo library access so you can attach an existing photo to your cat sighting report.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Strayfriends uses your location to tag cat sightings on the map so volunteers can find them.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
