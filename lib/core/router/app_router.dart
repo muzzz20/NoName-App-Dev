@@ -9,6 +9,8 @@ import '../../features/auth/screens/profile_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/home/screens/home_placeholder_screen.dart';
+import '../../features/reporting/screens/report_success_screen.dart';
+import '../../features/reporting/screens/submit_report_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -17,6 +19,10 @@ class AppRoutes {
   static const register = '/register';
   static const home = '/home';
   static const profile = '/profile';
+  static const submitReport = '/report/new';
+  static const reportSuccess = '/report/success';
+  static const reportDetail = '/report'; // /report/:id
+  static const myReports = '/my-reports';
 }
 
 /// Router with FirebaseAuth-driven redirect guard.
@@ -67,6 +73,16 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: AppRoutes.profile,
         builder: (_, _) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.submitReport,
+        builder: (_, _) => const SubmitReportScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.reportSuccess,
+        builder: (_, state) => ReportSuccessScreen(
+          reportId: state.uri.queryParameters['id'],
+        ),
       ),
     ],
   );

@@ -26,6 +26,11 @@ class HomePlaceholderScreen extends StatelessWidget {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.go(AppRoutes.submitReport),
+        icon: const Icon(Icons.add_a_photo_outlined),
+        label: const Text('Report a Cat'),
+      ),
       body: SafeArea(
         child: Padding(
           padding: AppSpacing.pagePadding,
