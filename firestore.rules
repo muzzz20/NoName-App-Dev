@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Strayfriends Firestore security rules.
+// Deploy with: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === Helpers ===
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'ngo'];
+    }
+
+    // === users/{uid} ===
+    // Profile doc per user. uid IS the doc id.
+    // - Read: any signed-in user (so report cards can show reporter name)
+    // - Create: only the user themselves, on registration
+    // - Update: only the user themselves; role cannot be changed by self
+    // - Delete: disallowed from client
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSelf(uid)
+                    && request.resource.data.role == 'user';
+      allow update: if isSelf(uid)
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // === reports/{id} ===
+    // Cat sighting reports. NAD-9.
+    // - Read: anyone (public Feed includes unauthed visitors per UC-06)
+    // - Create: any signed-in user, must set their own uid as userId
+    // - Update: only admin/ngo (e.g. status changes)
+    // - Delete: only admin/ngo
+    match /reports/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // === Default deny ===
+    // Any collection not explicitly matched above is fully locked.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "strayfriends-utm",
+          "appId": "1:209859165632:android:103acc10c17e79159b9c25",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "strayfriends-utm",
+          "appId": "1:209859165632:ios:37a0e50ea6ee660e9b9c25",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "strayfriends-utm",
+          "configurations": {
+            "android": "1:209859165632:android:103acc10c17e79159b9c25",
+            "ios": "1:209859165632:ios:37a0e50ea6ee660e9b9c25",
+            "web": "1:209859165632:web:a9226dccef97f9e69b9c25"
+          }
+        }
+      }
+    }
+  }
+}
