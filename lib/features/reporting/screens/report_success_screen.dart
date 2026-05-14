@@ -50,8 +50,12 @@ class ReportSuccessScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.stackXl),
               if (reportId != null) ...[
                 OutlinedButton.icon(
-                  onPressed: () =>
-                      context.go('${AppRoutes.reportDetail}/$reportId'),
+                  onPressed: () {
+                    // Replace success → home, then push detail so the
+                    // back chevron on Detail returns to Feed (not Success).
+                    context.go(AppRoutes.home);
+                    context.push('${AppRoutes.reportDetail}/$reportId');
+                  },
                   icon: const Icon(Icons.visibility_outlined),
                   label: const Text('View Report'),
                 ),

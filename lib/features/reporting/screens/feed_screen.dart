@@ -43,17 +43,17 @@ class _FeedScreenState extends State<FeedScreen> {
           IconButton(
             tooltip: 'My Reports',
             icon: const Icon(Icons.history),
-            onPressed: () => context.go(AppRoutes.myReports),
+            onPressed: () => context.push(AppRoutes.myReports),
           ),
           IconButton(
             tooltip: 'Profile',
             icon: const Icon(Icons.person_outline),
-            onPressed: () => context.go(AppRoutes.profile),
+            onPressed: () => context.push(AppRoutes.profile),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go(AppRoutes.submitReport),
+        onPressed: () => context.push(AppRoutes.submitReport),
         icon: const Icon(Icons.add_a_photo_outlined),
         label: const Text('Report a Cat'),
       ),
@@ -101,7 +101,7 @@ class _FeedScreenState extends State<FeedScreen> {
                 return ReportCard(
                   report: r,
                   onTap: () =>
-                      context.go('${AppRoutes.reportDetail}/${r.id}'),
+                      context.push('${AppRoutes.reportDetail}/${r.id}'),
                 );
               },
             ),

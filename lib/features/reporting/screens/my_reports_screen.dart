@@ -96,7 +96,7 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
                   report: r,
                   showStatusBadge: true,
                   onTap: () =>
-                      context.go('${AppRoutes.reportDetail}/${r.id}'),
+                      context.push('${AppRoutes.reportDetail}/${r.id}'),
                 );
               },
             ),

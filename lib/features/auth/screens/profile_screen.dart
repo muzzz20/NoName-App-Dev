@@ -77,7 +77,7 @@ class _ProfileBody extends StatelessWidget {
                 _MenuTile(
                   icon: Icons.history,
                   label: 'My Reports',
-                  onTap: () => context.go(AppRoutes.myReports),
+                  onTap: () => context.push(AppRoutes.myReports),
                 ),
                 _MenuTile(
                   icon: Icons.handshake_outlined,
