@@ -130,6 +130,19 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     }
   }
 
+  /// Fallback for laptops without GPS / web origins where the geolocator
+  /// API is denied. Drops a pin at UTM JB main campus center so the demo
+  /// path always has a valid location.
+  void _useCampusFallback() {
+    setState(() {
+      _location = const GeoPoint(1.5599, 103.6418); // UTM JB main campus
+      _locationError = null;
+      if (_locationLabelController.text.trim().isEmpty) {
+        _locationLabelController.text = 'UTM Johor Bahru (campus center)';
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (!_canSubmit) return;
     if (!_formKey.currentState!.validate()) return;
@@ -205,6 +218,8 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                   errorMessage: _locationError,
                   labelController: _locationLabelController,
                   onDetect: _locationLoading ? null : _detectLocation,
+                  onCampusFallback:
+                      _locationLoading ? null : _useCampusFallback,
                   onClear: _location == null
                       ? null
                       : () => setState(() => _location = null),
@@ -392,6 +407,7 @@ class _LocationField extends StatelessWidget {
   final String? errorMessage;
   final TextEditingController labelController;
   final VoidCallback? onDetect;
+  final VoidCallback? onCampusFallback;
   final VoidCallback? onClear;
 
   const _LocationField({
@@ -400,6 +416,7 @@ class _LocationField extends StatelessWidget {
     required this.errorMessage,
     required this.labelController,
     required this.onDetect,
+    required this.onCampusFallback,
     required this.onClear,
   });
 
@@ -461,6 +478,12 @@ class _LocationField extends StatelessWidget {
           Text(
             errorMessage!,
             style: AppText.bodySm.copyWith(color: AppColors.error),
+          ),
+          const SizedBox(height: AppSpacing.stackSm),
+          TextButton.icon(
+            onPressed: onCampusFallback,
+            icon: const Icon(Icons.school_outlined, size: 16),
+            label: const Text('Use UTM campus instead'),
           ),
         ],
       ],
