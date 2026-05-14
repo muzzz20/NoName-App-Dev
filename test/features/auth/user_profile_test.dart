@@ -2,7 +2,6 @@
 // Pure-function round-trip tests — no Firebase / network mocks needed.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_firestore_platform_interface/cloud_firestore_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:strayfriends/features/auth/models/user_profile.dart';
 
