@@ -331,7 +331,7 @@ class _PhotoUploadCard extends StatelessWidget {
                     borderRadius: AppRadius.cardRadius,
                     child: Image.network(
                       photoUrl!,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       errorBuilder: (_, _, _) => const Center(
                         child: Icon(Icons.broken_image_outlined,
                             color: AppColors.outline, size: 36),
