@@ -21,6 +21,22 @@ Future<void> main() async {
     ),
   ]);
 
+  // Sign in to Supabase anonymously so the app has a JWT with the
+  // `authenticated` role — required by the cat-photos bucket RLS policy
+  // (authenticated INSERT). This is independent from Firebase Auth which
+  // we use for user identity. Sprint 2 (AI-17) replaces this with a
+  // proper Firebase ID token ↔ Supabase JWT exchange so the Supabase
+  // user maps 1:1 to the real Firebase uid.
+  final supabase = Supabase.instance.client;
+  if (supabase.auth.currentUser == null) {
+    try {
+      await supabase.auth.signInAnonymously();
+    } catch (_) {
+      // Non-fatal at startup — uploads will surface the failure with
+      // a friendly message via PhotoUploadFailure.
+    }
+  }
+
   runApp(const StrayfriendsApp());
 }
 
