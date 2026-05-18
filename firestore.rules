@@ -82,13 +82,17 @@ service cloud.firestore {
 
     // === donations/{id} ===  NAD-22, NAD-26
     // Donor payment records. Schema: donorId, campaignId, amount,
-    // transactionId, status ('pending'|'success'|'failed'), createdAt.
+    // transactionId?, status ('success'|'failed'), failureCode?,
+    // createdAt, donorName?.
     // - Read: donor reads own; admin/ngo reads all (transparency)
     // - Create: signed-in donor only; donorId must equal own uid;
-    //           status must start 'pending'; amount must be positive
-    //           number; campaignId must reference an existing campaign
-    // - Update: disallowed from client — Cloud Function updates status
-    //           on payment confirmation via service account
+    //           status must be 'success' or 'failed' (final outcome
+    //           known client-side because PaymentService returns it
+    //           synchronously — see NAD-26); amount must be positive;
+    //           campaignId must reference an existing campaign.
+    // - Update: disallowed from client — anti-tampering. The Cloud
+    //           Function onDonationCreate updates campaigns.currentAmount
+    //           via service account (which bypasses these rules).
     // - Delete: disallowed
     match /donations/{id} {
       allow read: if isSignedIn() && (
@@ -97,7 +101,7 @@ service cloud.firestore {
                   );
       allow create: if isSignedIn()
                     && request.resource.data.donorId == request.auth.uid
-                    && request.resource.data.status == 'pending'
+                    && request.resource.data.status in ['success', 'failed']
                     && request.resource.data.amount is number
                     && request.resource.data.amount > 0
                     && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
