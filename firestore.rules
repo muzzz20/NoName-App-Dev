@@ -15,17 +15,26 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function isAdmin() {
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // True when the signed-in user's profile doc has role admin or ngo.
+    // Admin = UTM staff coordinating welfare; NGO = registered partner
+    // (e.g. PAWS Johor). Both have privileged write access to campaigns,
+    // reports, and allocations. Regular 'user' role is the default.
+    function isAdminOrNgo() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'ngo'];
+        userRole() in ['admin', 'ngo'];
     }
 
     // === users/{uid} ===
     // Profile doc per user. uid IS the doc id.
     // - Read: any signed-in user (so report cards can show reporter name)
-    // - Create: only the user themselves, on registration
+    // - Create: only the user themselves, on registration; role locked to 'user'
     // - Update: only the user themselves; role cannot be changed by self
+    //   (admin/ngo seeded manually by lead dev via Firestore console)
     // - Delete: disallowed from client
     match /users/{uid} {
       allow read: if isSignedIn();
@@ -47,8 +56,75 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == 'pending';
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow update: if isAdminOrNgo();
+      allow delete: if isAdminOrNgo();
+    }
+
+    // === campaigns/{id} ===  NAD-22, NAD-25
+    // Fundraising campaigns. Schema: title, description, goalAmount,
+    // currentAmount, imageUrl, status, createdBy, createdAt, endsAt.
+    // - Read: public — anyone can browse active campaigns
+    // - Create: admin/ngo only; must set createdBy to own uid;
+    //           currentAmount must start at 0; status must be 'active'
+    // - Update: admin/ngo only (status flips, edits to description, etc.)
+    //   Note: currentAmount also gets incremented by Cloud Function via
+    //   service account — service account bypasses rules.
+    // - Delete: disallowed from client (use status='archived' instead)
+    match /campaigns/{id} {
+      allow read: if true;
+      allow create: if isAdminOrNgo()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.currentAmount == 0
+                    && request.resource.data.status == 'active';
+      allow update: if isAdminOrNgo();
+      allow delete: if false;
+    }
+
+    // === donations/{id} ===  NAD-22, NAD-26
+    // Donor payment records. Schema: donorId, campaignId, amount,
+    // transactionId, status ('pending'|'success'|'failed'), createdAt.
+    // - Read: donor reads own; admin/ngo reads all (transparency)
+    // - Create: signed-in donor only; donorId must equal own uid;
+    //           status must start 'pending'; amount must be positive
+    //           number; campaignId must reference an existing campaign
+    // - Update: disallowed from client — Cloud Function updates status
+    //           on payment confirmation via service account
+    // - Delete: disallowed
+    match /donations/{id} {
+      allow read: if isSignedIn() && (
+                    resource.data.donorId == request.auth.uid ||
+                    isAdminOrNgo()
+                  );
+      allow create: if isSignedIn()
+                    && request.resource.data.donorId == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount > 0
+                    && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // === allocations/{id} ===  NAD-22, NAD-27
+    // Spend records per campaign. Schema: campaignId, amount, purpose,
+    // createdBy, createdAt, evidenceUrl?.
+    // - Read: public — transparency requirement
+    // - Create: admin/ngo only; createdBy must be own uid; amount > 0;
+    //           campaignId must reference an existing campaign.
+    //           The invariant sum(allocations) <= campaign.currentAmount
+    //           is enforced by the AllocationsService transaction
+    //           (rules cannot sum across docs).
+    // - Update: admin/ngo only (e.g. attach receipt evidenceUrl)
+    // - Delete: disallowed
+    match /allocations/{id} {
+      allow read: if true;
+      allow create: if isAdminOrNgo()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount > 0
+                    && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
+      allow update: if isAdminOrNgo();
+      allow delete: if false;
     }
 
     // === Default deny ===
