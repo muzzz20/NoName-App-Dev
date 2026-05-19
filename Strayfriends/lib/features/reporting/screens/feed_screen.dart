@@ -52,6 +52,36 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ],
       ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: AppColors.primary),
+              child: Text(
+                'Sprint 2 Test Menu',
+                style: AppText.headlineMd.copyWith(color: AppColors.onPrimary),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.volunteer_activism),
+              title: const Text('Test Donation Flow'),
+              onTap: () {
+                context.pop(); // close drawer
+                context.push(AppRoutes.donationFlow);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings),
+              title: const Text('Test Admin Campaigns'),
+              onTap: () {
+                context.pop(); // close drawer
+                context.push(AppRoutes.adminCampaigns);
+              },
+            ),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(AppRoutes.submitReport),
         icon: const Icon(Icons.add_a_photo_outlined),

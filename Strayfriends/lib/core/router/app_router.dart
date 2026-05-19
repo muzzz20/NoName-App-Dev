@@ -14,6 +14,12 @@ import '../../features/reporting/screens/report_detail_screen.dart';
 import '../../features/reporting/screens/report_success_screen.dart';
 import '../../features/reporting/screens/submit_report_screen.dart';
 
+import '../../features/donation/screens/donation_flow_screen.dart';
+import '../../features/donation/screens/donation_receipt_screen.dart';
+import '../../features/donation/models/receipt_model.dart';
+import '../../features/campaign/screens/admin_campaign_screen.dart';
+import '../../features/campaign/screens/campaign_form_screen.dart';
+
 class AppRoutes {
   AppRoutes._();
   static const splash = '/';
@@ -25,6 +31,10 @@ class AppRoutes {
   static const reportSuccess = '/report/success';
   static const reportDetail = '/report'; // /report/:id
   static const myReports = '/my-reports';
+  static const donationFlow = '/donation/flow';
+  static const donationReceipt = '/donation/receipt';
+  static const adminCampaigns = '/campaign/admin';
+  static const campaignNew = '/campaign/new';
 }
 
 /// Router with FirebaseAuth-driven redirect guard.
@@ -94,6 +104,24 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: AppRoutes.myReports,
         builder: (_, _) => const MyReportsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.donationFlow,
+        builder: (_, _) => const DonationFlowScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.donationReceipt,
+        builder: (_, state) => DonationReceiptScreen(
+          receipt: state.extra as ReceiptModel,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.adminCampaigns,
+        builder: (_, _) => const AdminCampaignScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.campaignNew,
+        builder: (_, _) => const CampaignFormScreen(),
       ),
     ],
   );
