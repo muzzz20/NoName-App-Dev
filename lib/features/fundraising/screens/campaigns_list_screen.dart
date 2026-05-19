@@ -27,7 +27,7 @@ class _CampaignsListScreenState extends State<CampaignsListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: StreamBuilder<List<Campaign>>(
-        stream: _campaignsService.watchActiveCampaigns(),
+        stream: _campaignsService.watchAllCampaigns(),
         builder: (context, snapshot) {
           return CustomScrollView(
             slivers: [

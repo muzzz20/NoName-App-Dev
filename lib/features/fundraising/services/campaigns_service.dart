@@ -76,6 +76,15 @@ class CampaignsService {
         .map((snap) => snap.docs.map(Campaign.fromFirestore).toList());
   }
 
+  /// Stream of all campaigns regardless of status, newest first.
+  Stream<List<Campaign>> watchAllCampaigns({int limit = 50}) {
+    return _campaigns
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(Campaign.fromFirestore).toList());
+  }
+
   /// Stream of campaigns created by a specific admin/ngo user.
   /// Powers an Admin "My Campaigns" management list.
   Stream<List<Campaign>> watchCampaignsByCreator({
