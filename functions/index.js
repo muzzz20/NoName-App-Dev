@@ -131,7 +131,7 @@ exports.onAllocationCreate = onDocumentCreated(
           if (!campaignSnap.exists) {
             throw new Error(`Campaign ${campaignId} not found`);
           }
-          const currentAmount = campaignSnap.data().currentAmount || 0;
+          const goalAmount = campaignSnap.data().goalAmount || 0;
 
           // Sum existing allocations for this campaign EXCLUDING the
           // just-created one (we'll add it if the invariant holds).
@@ -146,10 +146,10 @@ exports.onAllocationCreate = onDocumentCreated(
             allocated += doc.data().amount || 0;
           });
 
-          if (allocated + amount > currentAmount) {
+          if (allocated + amount > goalAmount) {
             throw new Error(
                 `Allocation invariant violated: existing ${allocated} + ` +
-                `new ${amount} > raised ${currentAmount}`,
+                `new ${amount} > goal ${goalAmount}`,
             );
           }
           // Invariant holds — nothing to mutate, the allocation stands.
