@@ -63,3 +63,10 @@ ui-debug.log
 *.pem
 *.key
 serviceAccountKey.json
+
+# Cloud Functions (NAD-26)
+functions/node_modules/
+functions/.eslintcache
+functions/firebase-debug.log
+functions/firebase-debug.*.log
+functions/lib/
