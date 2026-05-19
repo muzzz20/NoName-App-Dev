@@ -64,13 +64,43 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
     
+    if (_allocations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one allocation item (where the money goes).'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final goalAmount = double.parse(_goalController.text);
+    
+    // Calculate total allocation sum
+    double totalAllocated = 0;
+    for (final allocCtrl in _allocations) {
+      final amountText = allocCtrl['amount']!.text;
+      totalAllocated += double.tryParse(amountText) ?? 0;
+    }
+
+    if ((totalAllocated - goalAmount).abs() > 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The sum of allocations (RM ${totalAllocated.toStringAsFixed(2)}) must exactly match the Goal Amount (RM ${goalAmount.toStringAsFixed(2)}).',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    
     setState(() => _isSaving = true);
     
     try {
       final user = FirebaseAuth.instance.currentUser;
       final createdBy = user?.uid ?? 'admin_user_123';
       
-      final goalAmount = double.parse(_goalController.text);
       final days = int.parse(_daysController.text);
       
       final campaign = await _campaignsService.createCampaign(
