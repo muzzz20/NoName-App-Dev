@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../services/transparency_service.dart';
 import '../../auth/services/auth_service.dart';
+import '../models/campaign.dart';
 
 class CampaignDetailScreen extends StatefulWidget {
   final String campaignId;
@@ -315,8 +316,18 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                         border: Border(top: BorderSide(color: AppColors.cardBorder)),
                       ),
                       child: ElevatedButton(
-                        onPressed: () => context.push('/donate/${campaign.id}'),
-                        child: const Text('Donate Now'),
+                        onPressed: (campaign.status == CampaignStatus.active &&
+                                campaign.currentAmountSen < campaign.goalAmountSen)
+                            ? () => context.push('/donate/${campaign.id}')
+                            : null,
+                        child: Text(
+                          campaign.status == CampaignStatus.completed ||
+                                  campaign.currentAmountSen >= campaign.goalAmountSen
+                              ? 'Campaign Completed'
+                              : campaign.status == CampaignStatus.archived
+                                  ? 'Campaign Archived'
+                                  : 'Donate Now',
+                        ),
                       ),
                     ),
                   ),

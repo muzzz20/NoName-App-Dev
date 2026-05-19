@@ -150,6 +150,41 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
           final campaign = snapshot.data!;
           _campaign = campaign;
 
+          final isNotDonatable = campaign.status == CampaignStatus.completed ||
+              campaign.status == CampaignStatus.archived ||
+              campaign.currentAmountSen >= campaign.goalAmountSen;
+
+          if (isNotDonatable) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.stackLg),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.check_circle_outline, size: 64, color: AppColors.primary),
+                    const SizedBox(height: AppSpacing.stackMd),
+                    Text(
+                      'This campaign has been completed!',
+                      style: AppText.titleSm,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.stackSm),
+                    Text(
+                      'Thank you for your generosity, but we are no longer accepting donations for this campaign because the goal has been fully met.',
+                      style: AppText.bodyBase.copyWith(color: AppColors.secondary),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.stackLg),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Go Back'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           return Stack(
             children: [
               SafeArea(
