@@ -76,6 +76,17 @@ class CampaignsService {
         .map((snap) => snap.docs.map(Campaign.fromFirestore).toList());
   }
 
+  /// Stream of ALL campaigns (any status), newest first. Powers the
+  /// Browse Campaigns screen's "Completed" / "Archived" tab filters
+  /// — UI can sub-filter client-side without separate queries.
+  Stream<List<Campaign>> watchAllCampaigns({int limit = 50}) {
+    return _campaigns
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(Campaign.fromFirestore).toList());
+  }
+
   /// Stream of campaigns created by a specific admin/ngo user.
   /// Powers an Admin "My Campaigns" management list.
   Stream<List<Campaign>> watchCampaignsByCreator({

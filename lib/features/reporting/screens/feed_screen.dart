@@ -41,6 +41,11 @@ class _FeedScreenState extends State<FeedScreen> {
         title: const Text('Reports Feed'),
         actions: [
           IconButton(
+            tooltip: 'Campaigns',
+            icon: const Icon(Icons.volunteer_activism),
+            onPressed: () => context.push(AppRoutes.campaigns),
+          ),
+          IconButton(
             tooltip: 'My Reports',
             icon: const Icon(Icons.history),
             onPressed: () => context.push(AppRoutes.myReports),
