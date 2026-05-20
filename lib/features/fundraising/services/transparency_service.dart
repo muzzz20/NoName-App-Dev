@@ -80,7 +80,7 @@ class TransparencyService {
 
 /// Snapshot of a campaign's fundraising state for the public
 /// transparency view. Per NAD-27 AC: "total raised, donor count,
-/// allocations array, sum of allocations never exceeds currentAmount."
+/// allocations array, sum of allocations never exceeds goalAmount."
 class TransparencyReport {
   /// The campaign itself — `campaign.currentAmountSen` IS the total raised.
   final Campaign campaign;
@@ -90,7 +90,7 @@ class TransparencyReport {
   final int donorCount;
 
   /// Sum of all allocation amounts. Sprint 2 invariant:
-  /// `totalAllocatedSen <= campaign.currentAmountSen`. Cloud Function
+  /// `totalAllocatedSen <= campaign.goalAmountSen`. Cloud Function
   /// `onAllocationCreate` is the authoritative enforcer; this field
   /// is read-only display data.
   final int totalAllocatedSen;
@@ -114,7 +114,7 @@ class TransparencyReport {
   /// the Cloud Function invariant holds, but defensive math: clamped
   /// at 0 in case a stale snapshot is rendered briefly.
   int get unallocatedSen {
-    final raw = campaign.currentAmountSen - totalAllocatedSen;
+    final raw = campaign.goalAmountSen - totalAllocatedSen;
     return raw < 0 ? 0 : raw;
   }
 
@@ -123,7 +123,7 @@ class TransparencyReport {
   /// surface a visible error banner if rendering catches a transient
   /// stale state.
   bool get invariantViolated =>
-      totalAllocatedSen > campaign.currentAmountSen;
+      totalAllocatedSen > campaign.goalAmountSen;
 }
 
 class TransparencyFailure implements Exception {
