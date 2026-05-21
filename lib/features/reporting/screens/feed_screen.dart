@@ -160,7 +160,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Report sightings, fund care, and volunteer — together.',
+            'Report sightings, fund care, and volunteer together.',
             style: AppText.bodySm.copyWith(color: Colors.white70),
           ),
         ],
