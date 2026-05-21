@@ -137,7 +137,7 @@ class _FeedScreenState extends State<FeedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('🐈  Strayfriends @ UTM',
+          Text('Strayfriends @ UTM',
               style: AppText.bodySm.copyWith(color: AppColors.onPrimaryContainer)),
           const SizedBox(height: 6),
           Text(
