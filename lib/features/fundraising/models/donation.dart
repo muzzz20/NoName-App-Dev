@@ -42,6 +42,11 @@ class Donation {
   final DateTime createdAt;
   final String? donorName;
 
+  /// Stripe Checkout session id. Set by the webhook when the donation is
+  /// written; used by the receipt screen to correlate the redirect-back
+  /// (`/receipt?session_id=...`) to this doc.
+  final String? stripeSessionId;
+
   const Donation({
     required this.id,
     required this.donorId,
@@ -52,6 +57,7 @@ class Donation {
     this.transactionId,
     this.failureCode,
     this.donorName,
+    this.stripeSessionId,
   });
 
   Map<String, dynamic> toFirestore() => {
@@ -63,6 +69,7 @@ class Donation {
         if (failureCode != null) 'failureCode': failureCode,
         'createdAt': Timestamp.fromDate(createdAt),
         if (donorName != null) 'donorName': donorName,
+        if (stripeSessionId != null) 'stripeSessionId': stripeSessionId,
       };
 
   factory Donation.fromFirestore(
@@ -83,6 +90,7 @@ class Donation {
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       donorName: data['donorName'] as String?,
+      stripeSessionId: data['stripeSessionId'] as String?,
     );
   }
 }

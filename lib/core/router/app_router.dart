@@ -132,15 +132,9 @@ GoRouter buildAppRouter() {
       ),
       GoRoute(
         path: AppRoutes.receipt,
-        builder: (_, state) {
-          final args = state.extra as Map<String, dynamic>? ?? {};
-          return ReceiptScreen(
-            campaignName: args['campaignName'] ?? '',
-            amount: args['amount'] ?? 0.0,
-            transactionId: args['transactionId'] ?? '',
-            date: args['date'] ?? DateTime.now(),
-          );
-        },
+        builder: (_, state) => ReceiptScreen(
+          sessionId: state.uri.queryParameters['session_id'] ?? '',
+        ),
       ),
       GoRoute(
         path: AppRoutes.adminCampaign,

@@ -80,31 +80,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // === donations/{id} ===  NAD-22, NAD-26
+    // === donations/{id} ===  NAD-21, NAD-26
     // Donor payment records. Schema: donorId, campaignId, amount,
-    // transactionId?, status ('success'|'failed'), failureCode?,
-    // createdAt, donorName?.
+    // transactionId, stripeSessionId, status ('success'), donorName,
+    // createdAt.
     // - Read: donor reads own; admin/ngo reads all (transparency)
-    // - Create: signed-in donor only; donorId must equal own uid;
-    //           status must be 'success' or 'failed' (final outcome
-    //           known client-side because PaymentService returns it
-    //           synchronously — see NAD-26); amount must be positive;
-    //           campaignId must reference an existing campaign.
-    // - Update: disallowed from client — anti-tampering. The Cloud
-    //           Function onDonationCreate updates campaigns.currentAmount
-    //           via service account (which bypasses these rules).
-    // - Delete: disallowed
+    // - Create: DISALLOWED from client. Donations are written ONLY by
+    //           the `stripeWebhook` Cloud Function (admin service account,
+    //           bypasses rules) after Stripe confirms a real payment.
+    //           This makes a fabricated donation impossible from the app.
+    // - Update / Delete: disallowed.
     match /donations/{id} {
       allow read: if isSignedIn() && (
                     resource.data.donorId == request.auth.uid ||
                     isAdminOrNgo()
                   );
-      allow create: if isSignedIn()
-                    && request.resource.data.donorId == request.auth.uid
-                    && request.resource.data.status in ['success', 'failed']
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount > 0
-                    && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
+      allow create: if false;
       allow update: if false;
       allow delete: if false;
     }

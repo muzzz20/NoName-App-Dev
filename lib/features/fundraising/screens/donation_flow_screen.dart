@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,11 +8,15 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../models/campaign.dart';
-import '../models/donation.dart';
 import '../services/campaigns_service.dart';
-import '../services/donations_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../services/payment_service.dart';
 
+/// Donation amount entry → Stripe Checkout redirect (NAD-21/26).
+///
+/// Card data is NEVER entered here — tapping "Proceed to Payment"
+/// redirects to Stripe's hosted checkout. The donation doc is written
+/// server-side by the `stripeWebhook` Cloud Function once Stripe
+/// confirms the charge; the receipt screen then streams it by session.
 class DonationFlowScreen extends StatefulWidget {
   final String campaignId;
 
@@ -22,15 +27,13 @@ class DonationFlowScreen extends StatefulWidget {
 }
 
 class _DonationFlowScreenState extends State<DonationFlowScreen> {
-  final _formKey = GlobalKey<FormState>();
   double? _selectedAmount;
   final TextEditingController _customAmountController = TextEditingController();
   bool _isLoading = false;
 
   final _campaignsService = CampaignsService();
-  final _donationsService = DonationsService();
+  final _paymentService = PaymentService();
   late Future<Campaign?> _campaignFuture;
-  Campaign? _campaign;
 
   final List<double> _presets = [10, 20, 50];
 
@@ -53,81 +56,48 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
     });
   }
 
-  /// Map a PaymentFailureCode storageKey to a user-friendly message
-  /// (BR-011 — was showing the raw enum name in the snackbar).
-  String _friendlyFailure(String? code) {
-    switch (code) {
-      case 'cardDeclined':
-        return 'Your card was declined. Try a different payment method.';
-      case 'insufficientFunds':
-        return 'Insufficient funds. Reduce the amount or try another card.';
-      case 'expiredCard':
-        return 'Your card has expired. Please update your payment method.';
-      case 'networkError':
-        return 'Network error during payment. Check your connection and retry.';
-      default:
-        return 'Donation failed. Please try again.';
-    }
-  }
-
-  void _submit() async {
+  Future<void> _proceedToPayment() async {
     final amountText = _customAmountController.text;
-    final amount = amountText.isNotEmpty ? double.tryParse(amountText) : _selectedAmount;
+    final amount =
+        amountText.isNotEmpty ? double.tryParse(amountText) : _selectedAmount;
 
     if (amount == null || amount < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select or enter an amount of at least RM 5.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      _showError('Please select or enter an amount of at least RM 5.');
       return;
     }
 
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-    
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final donorId = user?.uid ?? 'sim_user_123';
       final donorName = user?.displayName ?? 'Anonymous Supporter';
-      
-      final donation = await _donationsService.donate(
-        donorId: donorId,
+
+      // Redirects the browser to Stripe's hosted checkout. On web the
+      // current tab navigates away; control returns via the success_url
+      // (/receipt?session_id=...). The donation is written by the webhook.
+      await _paymentService.startCheckout(
+        amountSen: (amount * 100).round(),
         campaignId: widget.campaignId,
-        amountSen: (amount * 100).toInt(),
         donorName: donorName,
+        origin: Uri.base.origin,
       );
-      
+      // On web we've navigated away by now; this line only runs on
+      // platforms where the launch returns control. Keep the spinner
+      // until the user comes back.
+    } on PaymentFailure catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      
-      if (donation.status == DonationStatus.success) {
-        context.pushReplacement('/receipt', extra: {
-          'campaignName': _campaign?.title ?? 'Campaign',
-          'amount': amount,
-          'transactionId': donation.transactionId ?? 'N/A',
-          'date': donation.createdAt,
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_friendlyFailure(donation.failureCode)),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      _showError(e.message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      _showError('Something went wrong starting payment. Please try again.');
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
+    );
   }
 
   @override
@@ -152,13 +122,15 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                  const Icon(Icons.error_outline,
+                      size: 64, color: AppColors.error),
                   const SizedBox(height: AppSpacing.stackMd),
                   Text('Campaign not found.', style: AppText.bodyBase),
                   const SizedBox(height: AppSpacing.stackLg),
                   ElevatedButton(
-                    onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/campaigns'),
+                    onPressed: () => context.canPop()
+                        ? context.pop()
+                        : context.go('/campaigns'),
                     child: const Text('Go Back'),
                   ),
                 ],
@@ -167,7 +139,6 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
           }
 
           final campaign = snapshot.data!;
-          _campaign = campaign;
 
           final isNotDonatable = campaign.status == CampaignStatus.completed ||
               campaign.status == CampaignStatus.archived ||
@@ -180,7 +151,8 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.check_circle_outline, size: 64, color: AppColors.primary),
+                    const Icon(Icons.check_circle_outline,
+                        size: 64, color: AppColors.primary),
                     const SizedBox(height: AppSpacing.stackMd),
                     Text(
                       'This campaign has been completed!',
@@ -189,14 +161,17 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                     ),
                     const SizedBox(height: AppSpacing.stackSm),
                     Text(
-                      'Thank you for your generosity, but we are no longer accepting donations for this campaign because the goal has been fully met.',
-                      style: AppText.bodyBase.copyWith(color: AppColors.secondary),
+                      'Thank you for your generosity, but we are no longer '
+                      'accepting donations because the goal has been met.',
+                      style:
+                          AppText.bodyBase.copyWith(color: AppColors.secondary),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: AppSpacing.stackLg),
                     ElevatedButton(
-                      onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/campaigns'),
+                      onPressed: () => context.canPop()
+                          ? context.pop()
+                          : context.go('/campaigns'),
                       child: const Text('Go Back'),
                     ),
                   ],
@@ -208,136 +183,149 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
           return Stack(
             children: [
               SafeArea(
-                child: Form(
-                  key: _formKey,
-                  child: SingleChildScrollView(
-                    padding: AppSpacing.pagePadding,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Campaign Summary
-                        Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(AppRadius.md),
-                              child: Image.network(
-                                campaign.imageUrl ?? '',
+                child: SingleChildScrollView(
+                  padding: AppSpacing.pagePadding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Campaign summary
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            child: Image.network(
+                              campaign.imageUrl ?? '',
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
                                 width: 60,
                                 height: 60,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  width: 60,
-                                  height: 60,
-                                  color: AppColors.surfaceVariant,
-                                  child: const Icon(Icons.pets, size: 24, color: AppColors.outline),
-                                ),
+                                color: AppColors.surfaceVariant,
+                                child: const Icon(Icons.pets,
+                                    size: 24, color: AppColors.outline),
                               ),
                             ),
-                            const SizedBox(width: AppSpacing.stackMd),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('You are donating to:', style: AppText.labelCaps),
-                                  Text(campaign.title, style: AppText.titleSm, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                ],
-                              ),
+                          ),
+                          const SizedBox(width: AppSpacing.stackMd),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('You are donating to:',
+                                    style: AppText.labelCaps),
+                                Text(campaign.title,
+                                    style: AppText.titleSm,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                              ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.stackLg),
-                        const Divider(),
-                        const SizedBox(height: AppSpacing.stackLg),
-                        
-                        Text('Select Amount', style: AppText.titleSm),
-                        const SizedBox(height: AppSpacing.stackMd),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: _presets.map((amount) {
-                            final isSelected = _selectedAmount == amount && _customAmountController.text.isEmpty;
-                            return Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  right: amount != _presets.last ? AppSpacing.stackSm : 0,
-                                ),
-                                child: InkWell(
-                                  onTap: () => _handlePresetSelected(amount),
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.stackMd),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? AppColors.primaryContainer : AppColors.surfaceContainerLowest,
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      border: Border.all(
-                                        color: isSelected ? AppColors.primaryContainer : AppColors.cardBorder,
-                                        width: 1.5,
-                                      ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.stackLg),
+                      const Divider(),
+                      const SizedBox(height: AppSpacing.stackLg),
+
+                      Text('Select Amount', style: AppText.titleSm),
+                      const SizedBox(height: AppSpacing.stackMd),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: _presets.map((amount) {
+                          final isSelected = _selectedAmount == amount &&
+                              _customAmountController.text.isEmpty;
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: amount != _presets.last
+                                    ? AppSpacing.stackSm
+                                    : 0,
+                              ),
+                              child: InkWell(
+                                onTap: () => _handlePresetSelected(amount),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.md),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: AppSpacing.stackMd),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.primaryContainer
+                                        : AppColors.surfaceContainerLowest,
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.md),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppColors.primaryContainer
+                                          : AppColors.cardBorder,
+                                      width: 1.5,
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      'RM ${amount.toInt()}',
-                                      style: AppText.bodyBase.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: isSelected ? AppColors.onPrimaryContainer : AppColors.onSurface,
-                                      ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    'RM ${amount.toInt()}',
+                                    style: AppText.bodyBase.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? AppColors.onPrimaryContainer
+                                          : AppColors.onSurface,
                                     ),
                                   ),
                                 ),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: AppSpacing.stackMd),
-                        TextFormField(
-                          controller: _customAmountController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                            hintText: 'Custom Amount (RM)',
-                            prefixIcon: Icon(Icons.attach_money),
-                          ),
-                          onChanged: (val) {
-                            if (val.isNotEmpty) {
-                              setState(() => _selectedAmount = null);
-                            }
-                          },
-                        ),
-                        
-                        const SizedBox(height: AppSpacing.stackLg),
-                        Text('Payment Details', style: AppText.titleSm),
-                        const SizedBox(height: AppSpacing.stackMd),
-                        TextFormField(
-                          decoration: const InputDecoration(
-                            hintText: 'Card Number',
-                            prefixIcon: Icon(Icons.credit_card),
-                          ),
-                          validator: (v) => v == null || v.length < 16 ? 'Invalid card number' : null,
-                        ),
-                        const SizedBox(height: AppSpacing.stackMd),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                decoration: const InputDecoration(hintText: 'MM/YY'),
-                                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                              ),
                             ),
-                            const SizedBox(width: AppSpacing.stackMd),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: AppSpacing.stackMd),
+                      TextField(
+                        controller: _customAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          hintText: 'Custom Amount (RM, min 5)',
+                          prefixIcon: Icon(Icons.attach_money),
+                        ),
+                        onChanged: (val) {
+                          if (val.isNotEmpty) {
+                            setState(() => _selectedAmount = null);
+                          }
+                        },
+                      ),
+
+                      const SizedBox(height: AppSpacing.stackLg),
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.stackMd),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondaryContainer,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.lock_outline,
+                                size: 20, color: AppColors.primary),
+                            const SizedBox(width: AppSpacing.stackSm),
                             Expanded(
-                              child: TextFormField(
-                                decoration: const InputDecoration(hintText: 'CVC'),
-                                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                              child: Text(
+                                "You'll be redirected to Stripe's secure "
+                                'checkout to complete payment. Test card: '
+                                '4242 4242 4242 4242.',
+                                style: AppText.bodySm
+                                    .copyWith(color: AppColors.secondary),
                               ),
                             ),
                           ],
                         ),
-                        
-                        const SizedBox(height: AppSpacing.stackXl),
-                        ElevatedButton(
-                          onPressed: _submit,
-                          child: const Text('Confirm Payment'),
-                        ),
-                      ],
-                    ),
+                      ),
+
+                      const SizedBox(height: AppSpacing.stackXl),
+                      ElevatedButton.icon(
+                        onPressed: _proceedToPayment,
+                        icon: const Icon(Icons.lock),
+                        label: const Text('Proceed to Secure Payment'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -347,9 +335,7 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                     filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                     child: Container(
                       color: AppColors.surface.withValues(alpha: 0.5),
-                      child: const Center(
-                        child: CircularProgressIndicator(),
-                      ),
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
                   ),
                 ),
