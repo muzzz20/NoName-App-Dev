@@ -29,6 +29,8 @@ import '../../features/volunteer/screens/admin_manage_activity_screen.dart';
 import '../../features/dashboard/screens/stakeholder_dashboard_screen.dart';
 import '../../features/dashboard/screens/public_stats_screen.dart';
 
+import '../../features/help/screens/help_screen.dart';
+
 class AppRoutes {
   AppRoutes._();
   static const splash = '/';
@@ -58,6 +60,9 @@ class AppRoutes {
   // Dashboard routes (Sprint 3)
   static const dashboard = '/dashboard';
   static const publicStats = '/public-stats';
+
+  // Help (Sprint 4)
+  static const help = '/help';
 }
 
 /// Routes a visitor (not signed in) may view without logging in. These
@@ -74,6 +79,7 @@ bool _isPublicRoute(String location) {
   if (location == AppRoutes.activities) return true;
   if (location.startsWith('${AppRoutes.activityDetail}/')) return true;
   if (location == AppRoutes.publicStats) return true;
+  if (location == AppRoutes.help) return true;
   // Report detail is public, but /report/new + /report/success are not.
   if (location.startsWith('${AppRoutes.reportDetail}/') &&
       location != AppRoutes.submitReport &&
@@ -214,6 +220,10 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: AppRoutes.publicStats,
         builder: (_, _) => const PublicStatsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.help,
+        builder: (_, _) => const HelpScreen(),
       ),
     ],
   );

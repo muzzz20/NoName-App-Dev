@@ -143,7 +143,14 @@ service cloud.firestore {
       allow update: if isAdminOrNgo()
                     || (isSignedIn()
                         && request.resource.data.diff(resource.data)
-                            .affectedKeys().hasOnly(['slotsRemaining']));
+                            .affectedKeys().hasOnly(['slotsRemaining'])
+                        // Only ±1: a sign-up decrements, a cancel
+                        // increments. Blocks a crafted client from
+                        // setting an arbitrary slot count (grief).
+                        && (request.resource.data.slotsRemaining ==
+                                resource.data.slotsRemaining - 1
+                            || request.resource.data.slotsRemaining ==
+                                resource.data.slotsRemaining + 1));
       allow delete: if false;
     }
 

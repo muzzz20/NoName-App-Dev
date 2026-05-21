@@ -70,6 +70,11 @@ class _FeedScreenState extends State<FeedScreen> {
       appBar: AppBar(
         title: const Text('Strayfriends'),
         actions: [
+          IconButton(
+            tooltip: 'Help',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => context.push(AppRoutes.help),
+          ),
           if (_isSignedIn)
             IconButton(
               tooltip: 'Profile',
