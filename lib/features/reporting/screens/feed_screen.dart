@@ -131,8 +131,20 @@ class _FeedScreenState extends State<FeedScreen> {
           AppSpacing.stackMd, AppSpacing.stackLg, AppSpacing.stackMd),
       padding: const EdgeInsets.all(AppSpacing.stackLg),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        // Warm maroon gradient (plum → maroon → deep maroon) for depth.
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF7A1228), Color(0xFF570000), Color(0xFF3A0000)],
+        ),
         borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF570000).withValues(alpha: 0.30),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,23 +233,27 @@ class _FeedScreenState extends State<FeedScreen> {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
       child: Row(
         children: [
-          _ctaCard('Report', Icons.add_a_photo, () {
+          _ctaCard('Report', Icons.add_a_photo,
+              const [Color(0xFF8B0000), Color(0xFF5A0000)], () {
             _isSignedIn
                 ? context.push(AppRoutes.submitReport)
                 : _requireSignIn('report a cat');
           }),
           const SizedBox(width: AppSpacing.stackSm),
           _ctaCard('Donate', Icons.volunteer_activism,
+              const [Color(0xFFA8203A), Color(0xFF6E1020)],
               () => context.push(AppRoutes.campaigns)),
           const SizedBox(width: AppSpacing.stackSm),
           _ctaCard('Volunteer', Icons.diversity_3,
+              const [Color(0xFFB5482F), Color(0xFF7A2A18)],
               () => context.push(AppRoutes.activities)),
         ],
       ),
     );
   }
 
-  Widget _ctaCard(String label, IconData icon, VoidCallback onTap) {
+  Widget _ctaCard(
+      String label, IconData icon, List<Color> gradient, VoidCallback onTap) {
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -245,8 +261,19 @@ class _FeedScreenState extends State<FeedScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.stackMd),
           decoration: BoxDecoration(
-            color: AppColors.primaryContainer,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradient,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.md),
+            boxShadow: [
+              BoxShadow(
+                color: gradient.first.withValues(alpha: 0.30),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             children: [
