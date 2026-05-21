@@ -109,9 +109,10 @@ class _FeedScreenState extends State<FeedScreen> {
                 _statsStrip(),
                 const SizedBox(height: AppSpacing.stackLg),
                 _ctaRow(),
-                const SizedBox(height: AppSpacing.stackLg),
+                const SizedBox(height: AppSpacing.stackMd),
                 _featuredCampaign(),
                 if (_isSignedIn) _quickLinks(),
+                _sectionDivider(),
                 _reportsHeader(),
                 ..._reportsBody(snapshot, reports),
                 const SizedBox(height: 96),
@@ -310,7 +311,10 @@ class _FeedScreenState extends State<FeedScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('★ Featured campaign', style: AppText.titleSm),
+              Divider(
+                  height: 1, thickness: 1, color: AppColors.outlineVariant),
+              const SizedBox(height: AppSpacing.stackLg),
+              Text('Featured campaign', style: AppText.titleSm),
               const SizedBox(height: AppSpacing.stackSm),
               InkWell(
                 onTap: () => context.push('/campaign/${c.id}'),
@@ -399,6 +403,7 @@ class _FeedScreenState extends State<FeedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _sectionDivider(),
           const Padding(
             padding: EdgeInsets.fromLTRB(
                 AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
@@ -420,6 +425,13 @@ class _FeedScreenState extends State<FeedScreen> {
       ),
     );
   }
+
+  // ── Section divider ─────────────────────────────────────────────────
+  Widget _sectionDivider() => Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.stackLg, 0,
+            AppSpacing.stackLg, AppSpacing.stackLg),
+        child: Divider(height: 1, thickness: 1, color: AppColors.outlineVariant),
+      );
 
   // ── Reports ─────────────────────────────────────────────────────────
   Widget _reportsHeader() {
