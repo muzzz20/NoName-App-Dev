@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Strayfriends Firebase Cloud Storage security rules.
+// Migrated from Supabase Storage RLS once the project moved to Blaze.
+// Deploy with: firebase deploy --only storage
+//
+// Note: Storage rules cannot read Firestore, so role-based (admin/ngo)
+// gating is NOT enforced here — any signed-in user may upload an image.
+// The privileged-write gate lives at the Firestore document level
+// (e.g. only admin/ngo can create a campaign doc that references the
+// uploaded image URL). Uploading an orphan image is harmless.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Cat sighting report photos (NAD-10). Public read so the feed
+    // renders for everyone; authenticated write, image-only, < 5 MB.
+    match /cat-photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Fundraising campaign hero images (NAD-25). Same policy.
+    match /campaign-photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Volunteer activity cover images (NAD-42, Sprint 3). Same policy.
+    match /activity-photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default deny — any unmatched path is fully locked.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

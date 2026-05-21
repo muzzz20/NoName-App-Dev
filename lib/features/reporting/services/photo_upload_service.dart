@@ -1,25 +1,31 @@
 import 'dart:io';
 
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-/// Photo capture + Supabase Storage upload.
+/// Photo capture + Firebase Cloud Storage upload.
 ///
-/// Bucket: `cat-photos` (public read, authenticated write — RLS enforced).
-/// Output: public HTTPS URL stored in CatReport.photoUrl (Firestore).
+/// Path: `cat-photos/{uuid}.{ext}` (public read, authenticated write —
+/// enforced by storage.rules). Output: HTTPS download URL stored in
+/// CatReport.photoUrl (Firestore).
+///
+/// Migrated from Supabase Storage to Firebase Storage once the project
+/// moved to the Blaze plan (Firebase Storage requires Blaze). Firebase
+/// Auth is the identity source — uploads carry the signed-in user's
+/// token automatically, so no separate anonymous sign-in is needed.
 class PhotoUploadService {
   PhotoUploadService({
-    SupabaseClient? supabase,
+    FirebaseStorage? storage,
     ImagePicker? picker,
-  })  : _supabase = supabase ?? Supabase.instance.client,
+  })  : _storage = storage ?? FirebaseStorage.instance,
         _picker = picker ?? ImagePicker();
 
-  final SupabaseClient _supabase;
+  final FirebaseStorage _storage;
   final ImagePicker _picker;
-  static const String _bucket = 'cat-photos';
+  static const String _folder = 'cat-photos';
 
   /// Soft cap from NAD-10 AC: keep uploads under 2 MB.
   static const int maxBytes = 2 * 1024 * 1024;
@@ -29,7 +35,7 @@ class PhotoUploadService {
   static const int maxDimension = 1280;
 
   /// Show platform picker (camera or gallery), compress, upload.
-  /// Returns the public URL of the uploaded photo.
+  /// Returns the download URL of the uploaded photo.
   ///
   /// Throws [PhotoUploadFailure] on any user-facing error
   /// (permission denied, network, oversized after compression, etc.).
@@ -80,27 +86,18 @@ class PhotoUploadService {
     Uint8List bytes, {
     required String originalPath,
   }) async {
-    // Note: bucket RLS allows insert from `authenticated` role. We use
-    // Firebase Auth (not Supabase Auth) — Sprint 2 follow-up will exchange
-    // a Firebase ID token for a Supabase JWT so RLS sees authenticated
-    // requests. For Sprint 1 demo, bucket policy is relaxed to `anon` write
-    // OR uploads are exercised via a custom service-role function. Verify
-    // your Supabase policy matches before testing.
     final id = const Uuid().v4();
     final ext = _ext(originalPath);
-    final objectPath = '$id$ext';
+    final objectPath = '$_folder/$id$ext';
 
     try {
-      await _supabase.storage.from(_bucket).uploadBinary(
-            objectPath,
-            bytes,
-            fileOptions: FileOptions(
-              contentType: _contentTypeFor(ext),
-              upsert: false,
-            ),
-          );
-      return _supabase.storage.from(_bucket).getPublicUrl(objectPath);
-    } on StorageException catch (e) {
+      final ref = _storage.ref().child(objectPath);
+      await ref.putData(
+        bytes,
+        SettableMetadata(contentType: _contentTypeFor(ext)),
+      );
+      return ref.getDownloadURL();
+    } on FirebaseException catch (e) {
       throw PhotoUploadFailure(_friendlyStorageError(e));
     } catch (e) {
       throw PhotoUploadFailure('Upload failed: $e');
@@ -127,20 +124,20 @@ class PhotoUploadService {
     }
   }
 
-  String _friendlyStorageError(StorageException e) {
-    // Supabase storage messages aren't always user-friendly — map the
-    // common ones to a clearer string. Default to e.message.
-    final msg = e.message.toLowerCase();
-    if (msg.contains('row level security')) {
-      return 'You do not have permission to upload. Sign in and try again.';
+  String _friendlyStorageError(FirebaseException e) {
+    // Map common Firebase Storage error codes to user-friendly strings.
+    switch (e.code) {
+      case 'unauthorized':
+        return 'You do not have permission to upload. Sign in and try again.';
+      case 'canceled':
+        return 'Upload canceled — please try again.';
+      case 'quota-exceeded':
+        return 'Storage is temporarily full — try again later.';
+      case 'retry-limit-exceeded':
+        return 'Network is unstable — check your connection and retry.';
+      default:
+        return 'Upload failed: ${e.message ?? e.code}';
     }
-    if (msg.contains('payload too large')) {
-      return 'Photo is too large — try a smaller image.';
-    }
-    if (msg.contains('duplicate')) {
-      return 'Photo already exists — try again.';
-    }
-    return 'Upload failed: ${e.message}';
   }
 }
 

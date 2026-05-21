@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/env.dart';
 import 'core/router/app_router.dart';
@@ -10,32 +9,16 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // .env loaded first — Supabase needs its URL + key from here.
+  // .env loaded first — runtime keys (payment gateway, Sprint 4) live here.
   await Env.load();
 
-  await Future.wait<void>([
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
-    Supabase.initialize(
-      url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
-    ),
-  ]);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  // Sign in to Supabase anonymously so the app has a JWT with the
-  // `authenticated` role — required by the cat-photos bucket RLS policy
-  // (authenticated INSERT). This is independent from Firebase Auth which
-  // we use for user identity. Sprint 2 (AI-17) replaces this with a
-  // proper Firebase ID token ↔ Supabase JWT exchange so the Supabase
-  // user maps 1:1 to the real Firebase uid.
-  final supabase = Supabase.instance.client;
-  if (supabase.auth.currentUser == null) {
-    try {
-      await supabase.auth.signInAnonymously();
-    } catch (_) {
-      // Non-fatal at startup — uploads will surface the failure with
-      // a friendly message via PhotoUploadFailure.
-    }
-  }
+  // Storage is Firebase Cloud Storage (migrated off Supabase once the
+  // project moved to Blaze). Uploads use the signed-in user's Firebase
+  // token automatically — no separate anonymous sign-in needed.
 
   runApp(const StrayfriendsApp());
 }
