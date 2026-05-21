@@ -68,19 +68,17 @@ class AppRoutes {
 }
 
 /// Routes a visitor (not signed in) may view without logging in. These
-/// mirror the SRDD's Visitor actor: public feed (UC-06), report detail
-/// (UC-07), browse campaigns + campaign detail (UC-09/10), browse
-/// activities + activity detail (UC-16/17), and public stats (UC-22).
-/// Auth-only actions on those screens (donate, sign up, report) prompt
-/// sign-in. Everything else (profile, submit, my-*, admin-*, receipt)
-/// stays gated.
+/// mirror the SRDD's Visitor actor: public feed (UC-06) + full reports
+/// list, report detail (UC-07), browse campaigns + campaign detail
+/// (UC-10/11), and public stats. Volunteer activities (UC-17/18) are
+/// Registered-only per the SRDD, so they are NOT public. Auth-only
+/// actions on public screens (donate, report) prompt sign-in; everything
+/// else (profile, submit, volunteer, my-*, admin-*, receipt) stays gated.
 bool _isPublicRoute(String location) {
   if (location == AppRoutes.home) return true;
   if (location == AppRoutes.reports) return true;
   if (location == AppRoutes.campaigns) return true;
   if (location.startsWith('${AppRoutes.campaignDetail}/')) return true;
-  if (location == AppRoutes.activities) return true;
-  if (location.startsWith('${AppRoutes.activityDetail}/')) return true;
   if (location == AppRoutes.publicStats) return true;
   if (location == AppRoutes.help) return true;
   // Report detail is public, but /report/new + /report/success are not.

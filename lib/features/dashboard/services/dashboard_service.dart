@@ -39,6 +39,15 @@ class DashboardService {
 
   /// Compute all KPI metrics in parallel. Latency is dominated by the
   /// slowest aggregation query (~hundreds of ms).
+  ///
+  /// **Reads only public collections.** This method powers the public Home
+  /// strip and Public Stats page (visitors, no auth), so it must never
+  /// touch the private `donations` / `signups` collections. Instead it uses
+  /// the Cloud-Function-maintained denormalized fields on the public
+  /// `campaigns` and `activities` docs:
+  /// - Funds raised  = sum(campaigns.currentAmount)
+  /// - Donations     = sum(campaigns.donationCount)  (added by onDonationCreate)
+  /// - Volunteers    = sum(activities.slots) − sum(activities.slotsRemaining)
   Future<DashboardStats> getStats() async {
     final reportsF = _firestore.collection('reports').count().get();
     final activeCampaignsF = _firestore
@@ -46,35 +55,34 @@ class DashboardService {
         .where('status', isEqualTo: 'active')
         .count()
         .get();
-    final donationsF = _firestore
-        .collection('donations')
-        .where('status', isEqualTo: 'success')
-        .count()
-        .get();
-    final fundsF = _firestore
-        .collection('donations')
-        .where('status', isEqualTo: 'success')
-        .aggregate(sum('amount'))
+    // Funds + donation count from public denormalized campaign fields.
+    final campaignsAggF = _firestore
+        .collection('campaigns')
+        .aggregate(sum('currentAmount'), sum('donationCount'))
         .get();
     final activitiesF = _firestore.collection('activities').count().get();
-    final signupsF = _firestore.collection('signups').count().get();
+    // Taken slots (= sign-ups) derived from public activities.
+    final activitiesAggF = _firestore
+        .collection('activities')
+        .aggregate(sum('slots'), sum('slotsRemaining'))
+        .get();
 
-    final results = await Future.wait([
-      reportsF,
-      activeCampaignsF,
-      donationsF,
-      activitiesF,
-      signupsF,
-    ]);
-    final funds = await fundsF;
+    final results =
+        await Future.wait([reportsF, activeCampaignsF, activitiesF]);
+    final campaignsAgg = await campaignsAggF;
+    final activitiesAgg = await activitiesAggF;
+
+    final slots = (activitiesAgg.getSum('slots') ?? 0).toInt();
+    final slotsRemaining = (activitiesAgg.getSum('slotsRemaining') ?? 0).toInt();
+    final takenSlots = (slots - slotsRemaining).clamp(0, slots);
 
     return DashboardStats(
       totalReports: (results[0]).count ?? 0,
       activeCampaigns: (results[1]).count ?? 0,
-      totalDonations: (results[2]).count ?? 0,
-      totalActivities: (results[3]).count ?? 0,
-      totalSignups: (results[4]).count ?? 0,
-      totalFundsRaisedSen: (funds.getSum('amount') ?? 0).toInt(),
+      totalActivities: (results[2]).count ?? 0,
+      totalFundsRaisedSen: (campaignsAgg.getSum('currentAmount') ?? 0).toInt(),
+      totalDonations: (campaignsAgg.getSum('donationCount') ?? 0).toInt(),
+      totalSignups: takenSlots,
     );
   }
 

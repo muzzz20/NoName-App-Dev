@@ -162,6 +162,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     try {
       final report = await _reportsService.createReport(
         userId: user.uid,
+        reporterName: user.displayName,
         photoUrl: _photoUrl!,
         location: _location!,
         condition: _condition!,

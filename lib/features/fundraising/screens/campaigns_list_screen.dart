@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../models/campaign.dart';
 import '../services/campaigns_service.dart';
+import '../widgets/campaign_card.dart';
 
 class CampaignsListScreen extends StatefulWidget {
   const CampaignsListScreen({super.key});
@@ -147,117 +148,13 @@ class _CampaignsListScreenState extends State<CampaignsListScreen> {
             final campaign = filteredCampaigns[index];
             return Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.stackMd),
-              child: _buildCampaignCard(context, campaign),
+              child: CampaignCard(
+                campaign: campaign,
+                onTap: () => context.push('/campaign/${campaign.id}'),
+              ),
             );
           },
           childCount: filteredCampaigns.length,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCampaignCard(BuildContext context, Campaign campaign) {
-    final isCompleted = campaign.status == CampaignStatus.completed;
-
-    return GestureDetector(
-      onTap: () => context.push('/campaign/${campaign.id}'),
-      child: Opacity(
-        opacity: isCompleted ? 0.6 : 1.0,
-        child: Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-                child: ColorFiltered(
-                  colorFilter: isCompleted
-                      ? const ColorFilter.matrix([
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0, 0, 0, 1, 0,
-                        ])
-                      : const ColorFilter.mode(Colors.transparent, BlendMode.multiply),
-                  child: Image.network(
-                    campaign.imageUrl ?? '',
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 180,
-                      width: double.infinity,
-                      color: AppColors.surfaceVariant,
-                      child: const Icon(Icons.pets, size: 48, color: AppColors.outline),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.stackMd),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            campaign.title,
-                            style: AppText.titleSm,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.stackSm,
-                            vertical: AppSpacing.stackXs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isCompleted ? AppColors.surfaceVariant : AppColors.primaryContainer,
-                            borderRadius: AppRadius.pillRadius,
-                          ),
-                          child: Text(
-                            campaign.status.name.toUpperCase(),
-                            style: AppText.labelCaps.copyWith(
-                              color: isCompleted ? AppColors.onSurfaceVariant : AppColors.onPrimaryContainer,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.stackSm),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                      child: LinearProgressIndicator(
-                        value: campaign.progress,
-                        backgroundColor: AppColors.surfaceVariant,
-                        color: AppColors.primary,
-                        minHeight: 8,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.stackSm),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(2)} raised',
-                          style: AppText.bodySm.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          'Goal: RM ${(campaign.goalAmountSen / 100).toStringAsFixed(2)}',
-                          style: AppText.bodySm.copyWith(color: AppColors.secondary),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

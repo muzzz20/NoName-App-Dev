@@ -29,11 +29,13 @@ class ReportsService {
     required CatCondition condition,
     required String description,
     String? locationLabel,
+    String? reporterName,
   }) async {
     final docRef = _reports.doc();
     final report = CatReport(
       id: docRef.id,
       userId: userId,
+      reporterName: reporterName,
       photoUrl: photoUrl,
       location: location,
       locationLabel: locationLabel,

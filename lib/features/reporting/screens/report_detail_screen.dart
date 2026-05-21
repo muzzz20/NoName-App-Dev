@@ -1,10 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
-import '../../auth/models/user_profile.dart';
 import '../../auth/services/auth_service.dart';
 import '../models/cat_report.dart';
 import '../services/reports_service.dart';
@@ -34,8 +34,21 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     if (report == null) {
       throw StateError('Report ${widget.reportId} not found');
     }
-    final reporter = await _authService.loadProfile(uid: report.userId);
-    return _DetailPayload(report: report, reporter: reporter);
+    // Prefer the denormalized reporter name (readable by everyone incl.
+    // visitors). Legacy reports lack it: a signed-in user can still resolve
+    // it from the auth-gated users doc; visitors fall back to a generic
+    // label since they cannot read the users collection.
+    var reporterName = report.reporterName;
+    if ((reporterName == null || reporterName.isEmpty) &&
+        FirebaseAuth.instance.currentUser != null) {
+      try {
+        reporterName =
+            (await _authService.loadProfile(uid: report.userId))?.fullName;
+      } catch (_) {
+        // Ignore — keep null, generic label is shown.
+      }
+    }
+    return _DetailPayload(report: report, reporterName: reporterName);
   }
 
   @override
@@ -61,8 +74,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
 class _DetailPayload {
   final CatReport report;
-  final UserProfile? reporter;
-  _DetailPayload({required this.report, required this.reporter});
+  final String? reporterName;
+  _DetailPayload({required this.report, required this.reporterName});
 }
 
 class _DetailBody extends StatelessWidget {
@@ -178,7 +191,9 @@ class _DetailBody extends StatelessWidget {
                       child: _MetaTile(
                         icon: Icons.person_outline,
                         label: 'Reporter',
-                        value: payload.reporter?.fullName ?? 'Unknown',
+                        value: payload.reporterName?.isNotEmpty == true
+                            ? payload.reporterName!
+                            : 'Community member',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.stackSm + 4),

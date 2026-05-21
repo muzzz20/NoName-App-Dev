@@ -43,7 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      // Router redirect will move us to /home once authStateChanges fires.
+      // Navigate explicitly. The router redirect alone can miss the first
+      // authStateChanges emission and leave the user stuck on /login;
+      // pushing /home here makes sign-in deterministic.
+      context.go(AppRoutes.home);
     } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
@@ -97,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
                 Text(
-                  'Welcome Back',
+                  'Welcome',
                   style: AppText.headlineMd.copyWith(color: AppColors.primary),
                   textAlign: TextAlign.center,
                 ),

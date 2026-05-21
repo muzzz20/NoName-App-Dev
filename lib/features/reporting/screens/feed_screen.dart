@@ -266,8 +266,11 @@ class _FeedScreenState extends State<FeedScreen> {
               () => context.push(AppRoutes.campaigns)),
           const SizedBox(width: AppSpacing.stackSm),
           _ctaCard('Volunteer', Icons.diversity_3,
-              const [Color(0xFFB5482F), Color(0xFF7A2A18)],
-              () => context.push(AppRoutes.activities)),
+              const [Color(0xFFB5482F), Color(0xFF7A2A18)], () {
+            _isSignedIn
+                ? context.push(AppRoutes.activities)
+                : _requireSignIn('volunteer');
+          }),
         ],
       ),
     );
@@ -326,7 +329,29 @@ class _FeedScreenState extends State<FeedScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Featured campaign', style: AppText.titleSm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Featured campaign', style: AppText.titleSm),
+                  InkWell(
+                    onTap: () => context.push(AppRoutes.campaigns),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Text('View all',
+                              style: AppText.bodySm.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary)),
+                          const Icon(Icons.chevron_right,
+                              size: 18, color: AppColors.primary),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: AppSpacing.stackSm),
               InkWell(
                 onTap: () => context.push('/campaign/${c.id}'),
