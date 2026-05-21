@@ -15,6 +15,20 @@ import '../models/cat_report.dart';
 import '../services/reports_service.dart';
 import '../widgets/report_card.dart';
 
+/// Formats [n] with comma thousands separators (no `intl` dependency).
+String _thousands(int n) {
+  final digits = n.abs().toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+    buf.write(digits[i]);
+  }
+  return n < 0 ? '-$buf' : buf.toString();
+}
+
+/// Whole-ringgit label from a sen amount, e.g. 150000 → 'RM 1,500'.
+String _rmWhole(int sen) => 'RM ${_thousands(sen ~/ 100)}';
+
 /// Home — impact-first design (Sprint 3 rework). UC-06 public feed.
 ///
 /// Layout: mission hero → live impact stats → primary CTAs (Report /
@@ -304,6 +318,8 @@ class _FeedScreenState extends State<FeedScreen> {
         final list = snap.data ?? const <Campaign>[];
         if (list.isEmpty) return const SizedBox.shrink();
         final c = list.first;
+        final pct = (c.progress * 100).round();
+        final daysLeft = c.endsAt?.difference(DateTime.now()).inDays;
         return Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.stackLg, 0,
               AppSpacing.stackLg, AppSpacing.stackLg),
@@ -320,22 +336,48 @@ class _FeedScreenState extends State<FeedScreen> {
                     color: AppColors.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(AppRadius.md),
                     border: Border.all(color: AppColors.cardBorder),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AspectRatio(
-                        aspectRatio: 16 / 7,
-                        child: Image.network(
-                          c.imageUrl ?? '',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            color: AppColors.surfaceVariant,
-                            child: const Icon(Icons.pets,
-                                size: 36, color: AppColors.outline),
+                      Stack(
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 16 / 7,
+                            child: Image.network(
+                              c.imageUrl ?? '',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                color: AppColors.surfaceVariant,
+                                child: const Icon(Icons.pets,
+                                    size: 36, color: AppColors.outline),
+                              ),
+                            ),
                           ),
-                        ),
+                          Positioned(
+                            top: AppSpacing.stackSm,
+                            left: AppSpacing.stackSm,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text('FEATURED',
+                                  style: AppText.labelCaps.copyWith(
+                                      color: Colors.white, fontSize: 10)),
+                            ),
+                          ),
+                        ],
                       ),
                       Padding(
                         padding: const EdgeInsets.all(AppSpacing.stackMd),
@@ -348,20 +390,69 @@ class _FeedScreenState extends State<FeedScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                             const SizedBox(height: AppSpacing.stackSm),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: LinearProgressIndicator(
-                                value: c.progress,
-                                minHeight: 8,
-                                backgroundColor: AppColors.surfaceVariant,
-                                color: AppColors.primary,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: LinearProgressIndicator(
+                                      value: c.progress,
+                                      minHeight: 10,
+                                      backgroundColor:
+                                          AppColors.surfaceVariant,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.stackSm),
+                                Text('$pct% funded',
+                                    style: AppText.bodySm.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary)),
+                              ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              'RM ${(c.currentAmountSen / 100).toStringAsFixed(0)} raised of RM ${(c.goalAmountSen / 100).toStringAsFixed(0)}',
-                              style: AppText.bodySm
-                                  .copyWith(color: AppColors.secondary),
+                            Row(
+                              children: [
+                                Text(_rmWhole(c.currentAmountSen),
+                                    style: AppText.bodyBase.copyWith(
+                                        fontWeight: FontWeight.w700)),
+                                Text(' raised',
+                                    style: AppText.bodySm.copyWith(
+                                        color: AppColors.secondary)),
+                                Text('  ·  of ${_rmWhole(c.goalAmountSen)} goal',
+                                    style: AppText.bodySm.copyWith(
+                                        color: AppColors.secondary)),
+                              ],
+                            ),
+                            if (daysLeft != null && daysLeft >= 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  const Icon(Icons.schedule,
+                                      size: 13, color: AppColors.outline),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                      daysLeft == 0
+                                          ? 'Ends today'
+                                          : '$daysLeft day(s) left',
+                                      style: AppText.labelCaps.copyWith(
+                                          color: AppColors.outline)),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: AppSpacing.stackMd),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                icon: const Icon(Icons.volunteer_activism,
+                                    size: 18),
+                                label: const Text('Donate now'),
+                                onPressed: () => _isSignedIn
+                                    ? context.push(
+                                        '${AppRoutes.donate}/${c.id}')
+                                    : _requireSignIn('donate'),
+                              ),
                             ),
                           ],
                         ),
@@ -423,10 +514,32 @@ class _FeedScreenState extends State<FeedScreen> {
 
   // ── Reports ─────────────────────────────────────────────────────────
   Widget _reportsHeader() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
           AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
-      child: _SectionLabel('Recent Reports'),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('Recent Reports', style: AppText.titleSm),
+          InkWell(
+            onTap: () => context.push(AppRoutes.reports),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Text('View all',
+                      style: AppText.bodySm.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary)),
+                  const Icon(Icons.chevron_right,
+                      size: 18, color: AppColors.primary),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -463,7 +576,7 @@ class _FeedScreenState extends State<FeedScreen> {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
         child: Column(
           children: [
-            for (final r in reports) ...[
+            for (final r in reports.take(3)) ...[
               ReportCard(
                 report: r,
                 onTap: () => context.push('${AppRoutes.reportDetail}/${r.id}'),
@@ -516,14 +629,6 @@ class _NavTile extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-  @override
-  Widget build(BuildContext context) =>
-      Align(alignment: Alignment.centerLeft, child: Text(text, style: AppText.titleSm));
 }
 
 class _QuickLinksLabel extends StatelessWidget {

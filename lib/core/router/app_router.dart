@@ -11,6 +11,7 @@ import '../../features/auth/screens/splash_screen.dart';
 import '../../features/reporting/screens/feed_screen.dart';
 import '../../features/reporting/screens/my_reports_screen.dart';
 import '../../features/reporting/screens/report_detail_screen.dart';
+import '../../features/reporting/screens/reports_feed_screen.dart';
 import '../../features/reporting/screens/report_success_screen.dart';
 import '../../features/reporting/screens/submit_report_screen.dart';
 
@@ -41,6 +42,7 @@ class AppRoutes {
   static const submitReport = '/report/new';
   static const reportSuccess = '/report/success';
   static const reportDetail = '/report'; // /report/:id
+  static const reports = '/reports'; // full public feed
   static const myReports = '/my-reports';
   
   // Fundraising routes
@@ -74,6 +76,7 @@ class AppRoutes {
 /// stays gated.
 bool _isPublicRoute(String location) {
   if (location == AppRoutes.home) return true;
+  if (location == AppRoutes.reports) return true;
   if (location == AppRoutes.campaigns) return true;
   if (location.startsWith('${AppRoutes.campaignDetail}/')) return true;
   if (location == AppRoutes.activities) return true;
@@ -156,6 +159,10 @@ GoRouter buildAppRouter() {
         path: '${AppRoutes.reportDetail}/:id',
         builder: (_, state) =>
             ReportDetailScreen(reportId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: AppRoutes.reports,
+        builder: (_, _) => const ReportsFeedScreen(),
       ),
       GoRoute(
         path: AppRoutes.myReports,
