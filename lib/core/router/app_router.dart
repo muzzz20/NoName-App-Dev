@@ -21,6 +21,11 @@ import '../../features/fundraising/screens/donation_flow_screen.dart';
 import '../../features/fundraising/screens/my_donations_screen.dart';
 import '../../features/fundraising/screens/receipt_screen.dart';
 
+import '../../features/volunteer/screens/activities_list_screen.dart';
+import '../../features/volunteer/screens/activity_detail_screen.dart';
+import '../../features/volunteer/screens/my_activities_screen.dart';
+import '../../features/volunteer/screens/admin_manage_activity_screen.dart';
+
 class AppRoutes {
   AppRoutes._();
   static const splash = '/';
@@ -40,6 +45,12 @@ class AppRoutes {
   static const myDonations = '/my-donations';
   static const receipt = '/receipt';
   static const adminCampaign = '/admin-campaign';
+
+  // Volunteer routes (Sprint 3)
+  static const activities = '/activities';
+  static const activityDetail = '/activity'; // /activity/:id
+  static const myActivities = '/my-activities';
+  static const adminActivity = '/admin-activity';
 }
 
 /// Router with FirebaseAuth-driven redirect guard.
@@ -139,6 +150,26 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: AppRoutes.adminCampaign,
         builder: (_, _) => const AdminManageCampaignScreen(),
+      ),
+
+      // Volunteer (Sprint 3)
+      GoRoute(
+        path: AppRoutes.activities,
+        builder: (_, _) => ActivitiesListScreen(),
+      ),
+      GoRoute(
+        path: '${AppRoutes.activityDetail}/:id',
+        builder: (_, state) => ActivityDetailScreen(
+          activityId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.myActivities,
+        builder: (_, _) => MyActivitiesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminActivity,
+        builder: (_, _) => AdminManageActivityScreen(),
       ),
     ],
   );
