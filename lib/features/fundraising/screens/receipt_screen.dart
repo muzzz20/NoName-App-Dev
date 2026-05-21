@@ -69,7 +69,7 @@ class ReceiptScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(AppSpacing.stackLg),
                       child: Column(
                         children: [
-                          _buildReceiptRow('Amount', 'RM ${amount.toStringAsFixed(0)}', isHighlight: true),
+                          _buildReceiptRow('Amount', 'RM ${amount.toStringAsFixed(2)}', isHighlight: true),
                           const SizedBox(height: AppSpacing.stackMd),
                           _buildReceiptRow('Campaign', campaignName),
                           const SizedBox(height: AppSpacing.stackMd),

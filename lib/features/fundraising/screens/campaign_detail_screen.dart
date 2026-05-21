@@ -89,7 +89,9 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                   ),
                   const SizedBox(height: AppSpacing.stackLg),
                   ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => context.canPop()
+                        ? context.pop()
+                        : context.go('/campaigns'),
                     child: const Text('Go Back'),
                   ),
                 ],
@@ -138,7 +140,9 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                                     child: IconButton(
                                       icon: const Icon(Icons.arrow_back),
                                       color: AppColors.onSurface,
-                                      onPressed: () => Navigator.pop(context), // BR-005 fix
+                                      onPressed: () => context.canPop()
+                                          ? context.pop()
+                                          : context.go('/campaigns'), // BR-005 + BR-013 fix
                                     ),
                                   ),
                                 ),
@@ -205,11 +209,11 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(0)}',
+                                  'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(2)}',
                                   style: AppText.titleSm.copyWith(color: AppColors.primary),
                                 ),
                                 Text(
-                                  'RM ${(campaign.goalAmountSen / 100).toStringAsFixed(0)} Goal',
+                                  'RM ${(campaign.goalAmountSen / 100).toStringAsFixed(2)} Goal',
                                   style: AppText.bodyBase.copyWith(color: AppColors.secondary),
                                 ),
                               ],
@@ -284,7 +288,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                                   children: [
                                     Text(alloc.purpose, style: AppText.bodyBase),
                                     Text(
-                                      'RM ${(alloc.amountSen / 100).toStringAsFixed(0)}',
+                                      'RM ${(alloc.amountSen / 100).toStringAsFixed(2)}',
                                       style: AppText.bodyBase.copyWith(fontWeight: FontWeight.w600),
                                     ),
                                   ],

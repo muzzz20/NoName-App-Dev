@@ -77,7 +77,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                       ),
                       const SizedBox(height: AppSpacing.stackLg),
                       ElevatedButton(
-                        onPressed: () => context.push('/home'),
+                        onPressed: () => context.go('/campaigns'),
                         child: const Text('Browse Campaigns'),
                       ),
                     ],
@@ -98,7 +98,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                           Text('Total Donated', style: AppText.labelCaps),
                           const SizedBox(height: AppSpacing.stackSm),
                           Text(
-                            'RM ${totalDonated.toStringAsFixed(0)}',
+                            'RM ${totalDonated.toStringAsFixed(2)}',
                             style: AppText.displayLg.copyWith(color: AppColors.primary),
                           ),
                         ],
@@ -172,7 +172,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        'RM ${(donation.amountSen / 100).toStringAsFixed(0)}',
+                                        'RM ${(donation.amountSen / 100).toStringAsFixed(2)}',
                                         style: AppText.titleSm,
                                       ),
                                       if (donation.status != DonationStatus.success)

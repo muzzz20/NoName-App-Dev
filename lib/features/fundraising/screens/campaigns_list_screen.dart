@@ -241,14 +241,14 @@ class _CampaignsListScreenState extends State<CampaignsListScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(0)} raised',
+                          'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(2)} raised',
                           style: AppText.bodySm.copyWith(
                             color: AppColors.primary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          'Goal: RM ${(campaign.goalAmountSen / 100).toStringAsFixed(0)}',
+                          'Goal: RM ${(campaign.goalAmountSen / 100).toStringAsFixed(2)}',
                           style: AppText.bodySm.copyWith(color: AppColors.secondary),
                         ),
                       ],

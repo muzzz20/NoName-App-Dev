@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
@@ -127,11 +128,11 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
       
       if (!mounted) return;
       setState(() => _isSaving = false);
-      
-      Navigator.pop(context);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Campaign created successfully!')),
       );
+      context.canPop() ? context.pop() : context.go('/campaigns');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -151,7 +152,8 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
         title: const Text('Create Campaign'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/campaigns'),
         ),
         actions: [
           TextButton(

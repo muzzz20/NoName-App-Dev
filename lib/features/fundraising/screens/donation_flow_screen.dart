@@ -53,6 +53,23 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
     });
   }
 
+  /// Map a PaymentFailureCode storageKey to a user-friendly message
+  /// (BR-011 — was showing the raw enum name in the snackbar).
+  String _friendlyFailure(String? code) {
+    switch (code) {
+      case 'cardDeclined':
+        return 'Your card was declined. Try a different payment method.';
+      case 'insufficientFunds':
+        return 'Insufficient funds. Reduce the amount or try another card.';
+      case 'expiredCard':
+        return 'Your card has expired. Please update your payment method.';
+      case 'networkError':
+        return 'Network error during payment. Check your connection and retry.';
+      default:
+        return 'Donation failed. Please try again.';
+    }
+  }
+
   void _submit() async {
     final amountText = _customAmountController.text;
     final amount = amountText.isNotEmpty ? double.tryParse(amountText) : _selectedAmount;
@@ -96,7 +113,7 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Donation failed: ${donation.failureCode ?? "Unknown error"}'),
+            content: Text(_friendlyFailure(donation.failureCode)),
             backgroundColor: AppColors.error,
           ),
         );
@@ -120,7 +137,8 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
         title: const Text('Donate'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/campaigns'),
         ),
       ),
       body: FutureBuilder<Campaign?>(
@@ -139,7 +157,8 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                   Text('Campaign not found.', style: AppText.bodyBase),
                   const SizedBox(height: AppSpacing.stackLg),
                   ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/campaigns'),
                     child: const Text('Go Back'),
                   ),
                 ],
@@ -176,7 +195,8 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                     ),
                     const SizedBox(height: AppSpacing.stackLg),
                     ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/campaigns'),
                       child: const Text('Go Back'),
                     ),
                   ],
