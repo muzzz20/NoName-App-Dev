@@ -355,3 +355,40 @@ exports.stripeWebhook = onRequest(
       }
     },
 );
+
+// === NAD-39: FCM push on new volunteer activity ===
+// When an admin/ngo publishes an activity, push a notification to the
+// "new-activities" topic. Clients that subscribed (NotificationService)
+// receive it; tapping opens the activity detail (data.route).
+exports.onActivityCreate = onDocumentCreated(
+    "activities/{activityId}",
+    async (event) => {
+      const activityId = event.params.activityId;
+      const activity = event.data && event.data.data();
+      if (!activity) {
+        logger.warn("onActivityCreate fired with no data", {activityId});
+        return;
+      }
+      const message = {
+        topic: "new-activities",
+        notification: {
+          title: "New volunteer activity",
+          body: activity.title || "A new way to help stray cats at UTM.",
+        },
+        data: {
+          activityId,
+          route: `/activity/${activityId}`,
+        },
+      };
+      try {
+        await admin.messaging().send(message);
+        logger.info("Activity push sent", {activityId});
+      } catch (err) {
+        // Non-fatal — push delivery failure shouldn't block activity
+        // creation. (e.g. topic has no subscribers yet.)
+        logger.error("Activity push failed", {
+          activityId, error: err.message,
+        });
+      }
+    },
+);
