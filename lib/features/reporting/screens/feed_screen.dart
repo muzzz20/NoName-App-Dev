@@ -8,14 +8,19 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../../auth/models/user_profile.dart';
 import '../../auth/services/auth_service.dart';
+import '../../dashboard/services/dashboard_service.dart';
+import '../../fundraising/models/campaign.dart';
+import '../../fundraising/services/campaigns_service.dart';
 import '../models/cat_report.dart';
 import '../services/reports_service.dart';
 import '../widgets/report_card.dart';
 
-/// Home (NAD-12 + Sprint 3 redesign) — UC-06 public feed.
+/// Home — impact-first design (Sprint 3 rework). UC-06 public feed.
 ///
-/// Layout: header (greeting / sign-in) → role-aware quick-nav →
-/// reports feed. Visitors can browse; auth-only actions prompt sign-in.
+/// Layout: mission hero → live impact stats → primary CTAs (Report /
+/// Donate / Volunteer) → featured campaign → role-aware quick links →
+/// recent reports. Visitors can browse everything read-only; auth-only
+/// actions prompt sign-in.
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
 
@@ -26,13 +31,15 @@ class FeedScreen extends StatefulWidget {
 class _FeedScreenState extends State<FeedScreen> {
   final _reportsService = ReportsService();
   final _authService = AuthService();
+  final _dashboard = DashboardService();
+  final _campaigns = CampaignsService();
 
   late Stream<List<CatReport>> _reports = _reportsService.watchAllReports();
+  late Future<DashboardStats> _statsF = _dashboard.getStats();
   UserProfile? _profile;
 
   bool get _isSignedIn => FirebaseAuth.instance.currentUser != null;
-  bool get _isAdmin =>
-      _profile?.role == 'admin' || _profile?.role == 'ngo';
+  bool get _isAdmin => _profile?.role == 'admin' || _profile?.role == 'ngo';
 
   @override
   void initState() {
@@ -48,20 +55,21 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _reports = _reportsService.watchAllReports());
+    setState(() {
+      _reports = _reportsService.watchAllReports();
+      _statsF = _dashboard.getStats();
+    });
     await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 
   void _requireSignIn(String action) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Sign in to $action.'),
-        action: SnackBarAction(
-          label: 'Sign In',
-          onPressed: () => context.push(AppRoutes.login),
-        ),
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Sign in to $action.'),
+      action: SnackBarAction(
+        label: 'Sign In',
+        onPressed: () => context.push(AppRoutes.login),
       ),
-    );
+    ));
   }
 
   @override
@@ -95,63 +103,261 @@ class _FeedScreenState extends State<FeedScreen> {
         icon: const Icon(Icons.add_a_photo_outlined),
         label: const Text('Report a Cat'),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _header(),
-          _quickNav(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.stackLg, AppSpacing.stackSm, AppSpacing.stackLg, 0),
-            child: Text('Recent Reports', style: AppText.titleSm),
-          ),
-          Expanded(child: _feed()),
-        ],
+      body: StreamBuilder<List<CatReport>>(
+        stream: _reports,
+        builder: (context, snapshot) {
+          final reports = snapshot.data ?? const <CatReport>[];
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                _hero(),
+                _statsStrip(),
+                const SizedBox(height: AppSpacing.stackLg),
+                _ctaRow(),
+                const SizedBox(height: AppSpacing.stackLg),
+                _featuredCampaign(),
+                if (_isSignedIn) _quickLinks(),
+                _reportsHeader(),
+                ..._reportsBody(snapshot, reports),
+                const SizedBox(height: 96),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _header() {
+  // ── Hero ────────────────────────────────────────────────────────────
+  Widget _hero() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(AppSpacing.stackLg,
+      margin: const EdgeInsets.fromLTRB(AppSpacing.stackLg,
           AppSpacing.stackMd, AppSpacing.stackLg, AppSpacing.stackMd),
+      padding: const EdgeInsets.all(AppSpacing.stackLg),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('🐈  Strayfriends @ UTM',
+              style: AppText.bodySm.copyWith(color: AppColors.onPrimaryContainer)),
+          const SizedBox(height: 6),
           Text(
             _isSignedIn
-                ? 'Hi, ${_profile?.fullName ?? 'friend'} 👋'
-                : 'Welcome to Strayfriends',
-            style: AppText.titleSm,
+                ? 'Welcome back,\n${_profile?.fullName ?? 'friend'}.'
+                : 'Every cat deserves\ncare at UTM.',
+            style: AppText.displayLg.copyWith(color: Colors.white),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 6),
           Text(
-            _isSignedIn
-                ? 'Thanks for helping UTM\'s stray cats.'
-                : 'Help stray cats at UTM — browse, donate, volunteer.',
-            style: AppText.bodySm.copyWith(color: AppColors.secondary),
+            'Report sightings, fund care, and volunteer — together.',
+            style: AppText.bodySm.copyWith(color: Colors.white70),
           ),
         ],
       ),
     );
   }
 
-  Widget _quickNav() {
+  // ── Live impact stats ───────────────────────────────────────────────
+  Widget _statsStrip() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
+      child: FutureBuilder<DashboardStats>(
+        future: _statsF,
+        builder: (context, snap) {
+          final s = snap.data;
+          return Row(
+            children: [
+              _statCard('Cats reported',
+                  s == null ? '—' : '${s.totalReports}', Icons.pets),
+              const SizedBox(width: AppSpacing.stackSm),
+              _statCard(
+                  'Raised',
+                  s == null
+                      ? '—'
+                      : 'RM ${(s.totalFundsRaisedSen / 100).toStringAsFixed(0)}',
+                  Icons.favorite),
+              const SizedBox(width: AppSpacing.stackSm),
+              _statCard('Volunteers',
+                  s == null ? '—' : '${s.totalSignups}', Icons.group),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _statCard(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.stackMd, horizontal: AppSpacing.stackSm),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: AppColors.primary, size: 20),
+            const SizedBox(height: 6),
+            Text(value,
+                style: AppText.titleSm.copyWith(color: AppColors.primary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Text(label,
+                style: AppText.bodySm.copyWith(color: AppColors.secondary),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Primary CTAs ────────────────────────────────────────────────────
+  Widget _ctaRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
+      child: Row(
+        children: [
+          _ctaCard('Report', Icons.add_a_photo, () {
+            _isSignedIn
+                ? context.push(AppRoutes.submitReport)
+                : _requireSignIn('report a cat');
+          }),
+          const SizedBox(width: AppSpacing.stackSm),
+          _ctaCard('Donate', Icons.volunteer_activism,
+              () => context.push(AppRoutes.campaigns)),
+          const SizedBox(width: AppSpacing.stackSm),
+          _ctaCard('Volunteer', Icons.diversity_3,
+              () => context.push(AppRoutes.activities)),
+        ],
+      ),
+    );
+  }
+
+  Widget _ctaCard(String label, IconData icon, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.stackMd),
+          decoration: BoxDecoration(
+            color: AppColors.primaryContainer,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: Colors.white, size: 24),
+              const SizedBox(height: 6),
+              Text(label,
+                  style: AppText.bodyBase.copyWith(
+                      color: Colors.white, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Featured campaign ───────────────────────────────────────────────
+  Widget _featuredCampaign() {
+    return StreamBuilder<List<Campaign>>(
+      stream: _campaigns.watchActiveCampaigns(limit: 1),
+      builder: (context, snap) {
+        final list = snap.data ?? const <Campaign>[];
+        if (list.isEmpty) return const SizedBox.shrink();
+        final c = list.first;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.stackLg, 0,
+              AppSpacing.stackLg, AppSpacing.stackLg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('★ Featured campaign', style: AppText.titleSm),
+              const SizedBox(height: AppSpacing.stackSm),
+              InkWell(
+                onTap: () => context.push('/campaign/${c.id}'),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16 / 7,
+                        child: Image.network(
+                          c.imageUrl ?? '',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(
+                            color: AppColors.surfaceVariant,
+                            child: const Icon(Icons.pets,
+                                size: 36, color: AppColors.outline),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(AppSpacing.stackMd),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(c.title,
+                                style: AppText.bodyBase
+                                    .copyWith(fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: AppSpacing.stackSm),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: c.progress,
+                                minHeight: 8,
+                                backgroundColor: AppColors.surfaceVariant,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'RM ${(c.currentAmountSen / 100).toStringAsFixed(0)} raised of RM ${(c.goalAmountSen / 100).toStringAsFixed(0)}',
+                              style: AppText.bodySm
+                                  .copyWith(color: AppColors.secondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Role-aware quick links (signed-in) ──────────────────────────────
+  Widget _quickLinks() {
     final items = <_NavItem>[
-      _NavItem('Campaigns', Icons.campaign, () => context.push(AppRoutes.campaigns)),
-      _NavItem('Volunteer', Icons.volunteer_activism,
-          () => context.push(AppRoutes.activities)),
-      _NavItem('Our Impact', Icons.insights,
-          () => context.push(AppRoutes.publicStats)),
-      if (_isSignedIn) ...[
-        _NavItem('My Reports', Icons.history,
-            () => context.push(AppRoutes.myReports)),
-        _NavItem('My Donations', Icons.receipt_long,
-            () => context.push(AppRoutes.myDonations)),
-        _NavItem('My Activities', Icons.event_available,
-            () => context.push(AppRoutes.myActivities)),
-      ],
+      _NavItem('My Reports', Icons.history, () => context.push(AppRoutes.myReports)),
+      _NavItem('My Donations', Icons.receipt_long,
+          () => context.push(AppRoutes.myDonations)),
+      _NavItem('My Activities', Icons.event_available,
+          () => context.push(AppRoutes.myActivities)),
       if (_isAdmin) ...[
         _NavItem('Dashboard', Icons.dashboard,
             () => context.push(AppRoutes.dashboard)),
@@ -161,65 +367,86 @@ class _FeedScreenState extends State<FeedScreen> {
             () => context.push(AppRoutes.adminActivity)),
       ],
     ];
-
-    return SizedBox(
-      height: 92,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.stackMd),
-        itemBuilder: (context, i) => _NavTile(item: items[i]),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.stackLg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
+            child: _QuickLinksLabel(),
+          ),
+          SizedBox(
+            height: 88,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
+              itemCount: items.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(width: AppSpacing.stackSm),
+              itemBuilder: (context, i) => _NavTile(item: items[i]),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _feed() {
-    return StreamBuilder<List<CatReport>>(
-      stream: _reports,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _FeedMessage(
-            icon: Icons.cloud_off_outlined,
-            title: 'Could not load reports',
-            subtitle: snapshot.error.toString(),
-            onRetry: () => setState(
-                () => _reports = _reportsService.watchAllReports()),
-          );
-        }
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary));
-        }
-        final reports = snapshot.data ?? const [];
-        if (reports.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const [SizedBox(height: 80), _EmptyState()],
-            ),
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          child: ListView.separated(
-            padding: AppSpacing.pagePadding,
-            itemCount: reports.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(height: AppSpacing.stackSm + 4),
-            itemBuilder: (context, i) {
-              final r = reports[i];
-              return ReportCard(
+  // ── Reports ─────────────────────────────────────────────────────────
+  Widget _reportsHeader() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(
+          AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
+      child: _SectionLabel('Recent Reports'),
+    );
+  }
+
+  List<Widget> _reportsBody(
+      AsyncSnapshot<List<CatReport>> snapshot, List<CatReport> reports) {
+    if (snapshot.hasError) {
+      return [
+        Padding(
+          padding: AppSpacing.pagePadding,
+          child: Text('Could not load reports: ${snapshot.error}',
+              style: AppText.bodySm.copyWith(color: AppColors.outline)),
+        ),
+      ];
+    }
+    if (snapshot.connectionState == ConnectionState.waiting &&
+        !snapshot.hasData) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(AppSpacing.stackXl),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (reports.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: _EmptyState(),
+        ),
+      ];
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
+        child: Column(
+          children: [
+            for (final r in reports) ...[
+              ReportCard(
                 report: r,
                 onTap: () => context.push('${AppRoutes.reportDetail}/${r.id}'),
-              );
-            },
-          ),
-        );
-      },
-    );
+              ),
+              const SizedBox(height: AppSpacing.stackSm + 4),
+            ],
+          ],
+        ),
+      ),
+    ];
   }
 }
 
@@ -240,7 +467,7 @@ class _NavTile extends StatelessWidget {
       onTap: item.onTap,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
-        width: 84,
+        width: 96,
         padding: const EdgeInsets.all(AppSpacing.stackSm),
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
@@ -250,20 +477,33 @@ class _NavTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(item.icon, color: AppColors.primary, size: 26),
+            Icon(item.icon, color: AppColors.primary, size: 24),
             const SizedBox(height: 6),
-            Text(
-              item.label,
-              style: AppText.bodySm,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text(item.label,
+                style: AppText.bodySm,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
           ],
         ),
       ),
     );
   }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+  @override
+  Widget build(BuildContext context) =>
+      Align(alignment: Alignment.centerLeft, child: Text(text, style: AppText.titleSm));
+}
+
+class _QuickLinksLabel extends StatelessWidget {
+  const _QuickLinksLabel();
+  @override
+  Widget build(BuildContext context) =>
+      Align(alignment: Alignment.centerLeft, child: Text('Quick links', style: AppText.titleSm));
 }
 
 class _EmptyState extends StatelessWidget {
@@ -284,48 +524,6 @@ class _EmptyState extends StatelessWidget {
               style: AppText.bodySm.copyWith(color: AppColors.outline),
               textAlign: TextAlign.center),
         ],
-      ),
-    );
-  }
-}
-
-class _FeedMessage extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback? onRetry;
-  const _FeedMessage({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: AppSpacing.pagePadding,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppColors.outline, size: 48),
-            const SizedBox(height: AppSpacing.stackMd),
-            Text(title, style: AppText.titleSm, textAlign: TextAlign.center),
-            const SizedBox(height: AppSpacing.stackSm),
-            Text(subtitle,
-                style: AppText.bodySm.copyWith(color: AppColors.outline),
-                textAlign: TextAlign.center),
-            if (onRetry != null) ...[
-              const SizedBox(height: AppSpacing.stackLg),
-              OutlinedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Try again'),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
