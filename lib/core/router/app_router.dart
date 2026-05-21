@@ -26,6 +26,9 @@ import '../../features/volunteer/screens/activity_detail_screen.dart';
 import '../../features/volunteer/screens/my_activities_screen.dart';
 import '../../features/volunteer/screens/admin_manage_activity_screen.dart';
 
+import '../../features/dashboard/screens/stakeholder_dashboard_screen.dart';
+import '../../features/dashboard/screens/public_stats_screen.dart';
+
 class AppRoutes {
   AppRoutes._();
   static const splash = '/';
@@ -51,6 +54,10 @@ class AppRoutes {
   static const activityDetail = '/activity'; // /activity/:id
   static const myActivities = '/my-activities';
   static const adminActivity = '/admin-activity';
+
+  // Dashboard routes (Sprint 3)
+  static const dashboard = '/dashboard';
+  static const publicStats = '/public-stats';
 }
 
 /// Router with FirebaseAuth-driven redirect guard.
@@ -170,6 +177,16 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: AppRoutes.adminActivity,
         builder: (_, _) => AdminManageActivityScreen(),
+      ),
+
+      // Dashboards (Sprint 3)
+      GoRoute(
+        path: AppRoutes.dashboard,
+        builder: (_, _) => const StakeholderDashboardScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.publicStats,
+        builder: (_, _) => const PublicStatsScreen(),
       ),
     ],
   );
