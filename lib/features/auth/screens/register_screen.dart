@@ -77,7 +77,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppSpacing.stackLg),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back to browsing',
+                    onPressed: () => context.canPop()
+                        ? context.pop()
+                        : context.go(AppRoutes.home),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.stackSm),
                 Text(
                   'Join Strayfriends',
                   style: AppText.headlineMd.copyWith(color: AppColors.primary),
