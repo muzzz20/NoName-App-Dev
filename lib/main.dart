@@ -1,7 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-import 'core/env.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -9,9 +8,6 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // .env loaded first — runtime keys (payment gateway, Sprint 4) live here.
-  await Env.load();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
