@@ -85,23 +85,52 @@ exports.onDonationCreate = onDocumentCreated(
       const campaignRef = db.collection("campaigns").doc(campaignId);
       try {
         await db.runTransaction(async (tx) => {
+          // All reads must precede all writes in a Firestore transaction.
           const snap = await tx.get(campaignRef);
           if (!snap.exists) {
             throw new Error(
                 `Campaign ${campaignId} not found for donation ${donationId}`,
             );
           }
+
+          // Unique-donor tracking: a marker doc per (campaign, donor) lets
+          // us increment donorCount only the first time a donor gives to a
+          // campaign. The markers live in a CF-only subcollection (default
+          // rules deny client access); clients read the public donorCount
+          // field on the campaign instead.
+          const donorId = donation.donorId;
+          let donorMarkerRef = null;
+          let isNewDonor = false;
+          if (donorId) {
+            donorMarkerRef = campaignRef.collection("donors").doc(donorId);
+            const donorSnap = await tx.get(donorMarkerRef);
+            isNewDonor = !donorSnap.exists;
+          }
+
           const data = snap.data();
           const current = data.currentAmount || 0;
           const goal = data.goalAmount || 0;
           const newAmount = current + amount;
 
-          const updates = {currentAmount: newAmount};
+          const updates = {
+            currentAmount: newAmount,
+            // Denormalized public aggregates for the dashboards + campaign
+            // detail (so visitors/regular users never read private donations).
+            donationCount: (data.donationCount || 0) + 1,
+          };
+          if (isNewDonor) {
+            updates.donorCount = (data.donorCount || 0) + 1;
+          }
           // Auto-flip to 'completed' the first time we cross the goal.
           if (newAmount >= goal && data.status === "active" && goal > 0) {
             updates.status = "completed";
           }
           tx.update(campaignRef, updates);
+          if (isNewDonor && donorMarkerRef) {
+            tx.set(donorMarkerRef, {
+              firstDonationAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
         });
 
         logger.info("Campaign total updated", {
