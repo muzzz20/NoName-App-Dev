@@ -60,11 +60,35 @@ class AppRoutes {
   static const publicStats = '/public-stats';
 }
 
+/// Routes a visitor (not signed in) may view without logging in. These
+/// mirror the SRDD's Visitor actor: public feed (UC-06), report detail
+/// (UC-07), browse campaigns + campaign detail (UC-09/10), browse
+/// activities + activity detail (UC-16/17), and public stats (UC-22).
+/// Auth-only actions on those screens (donate, sign up, report) prompt
+/// sign-in. Everything else (profile, submit, my-*, admin-*, receipt)
+/// stays gated.
+bool _isPublicRoute(String location) {
+  if (location == AppRoutes.home) return true;
+  if (location == AppRoutes.campaigns) return true;
+  if (location.startsWith('${AppRoutes.campaignDetail}/')) return true;
+  if (location == AppRoutes.activities) return true;
+  if (location.startsWith('${AppRoutes.activityDetail}/')) return true;
+  if (location == AppRoutes.publicStats) return true;
+  // Report detail is public, but /report/new + /report/success are not.
+  if (location.startsWith('${AppRoutes.reportDetail}/') &&
+      location != AppRoutes.submitReport &&
+      location != AppRoutes.reportSuccess) {
+    return true;
+  }
+  return false;
+}
+
 /// Router with FirebaseAuth-driven redirect guard.
 ///
-/// - Unauthenticated users at any protected route → `/login`.
+/// - Visitors may view public routes (see [_isPublicRoute]); other
+///   protected routes → `/login`.
 /// - Authenticated users at `/login` or `/register` → `/home`.
-/// - `/` (splash) shown only until Firebase auth state is known.
+/// - `/` (splash) always resolves to the public `/home` feed.
 GoRouter buildAppRouter() {
   final authStream = FirebaseAuth.instance.authStateChanges();
   return GoRouter(
@@ -77,14 +101,17 @@ GoRouter buildAppRouter() {
           location == AppRoutes.register;
       final atSplash = location == AppRoutes.splash;
 
+      // Everyone (incl. visitors) lands on the public home feed.
       if (atSplash) {
-        return isSignedIn ? AppRoutes.home : AppRoutes.login;
+        return AppRoutes.home;
       }
-      if (!isSignedIn && !atAuthScreen) {
-        return AppRoutes.login;
-      }
+      // Signed-in users skip the auth screens.
       if (isSignedIn && atAuthScreen) {
         return AppRoutes.home;
+      }
+      // Visitors may view public routes; anything else → login.
+      if (!isSignedIn && !atAuthScreen && !_isPublicRoute(location)) {
+        return AppRoutes.login;
       }
       return null;
     },
