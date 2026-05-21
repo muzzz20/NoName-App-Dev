@@ -96,13 +96,6 @@ class _FeedScreenState extends State<FeedScreen> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _isSignedIn
-            ? context.push(AppRoutes.submitReport)
-            : _requireSignIn('report a cat'),
-        icon: const Icon(Icons.add_a_photo_outlined),
-        label: const Text('Report a Cat'),
-      ),
       body: StreamBuilder<List<CatReport>>(
         stream: _reports,
         builder: (context, snapshot) {
