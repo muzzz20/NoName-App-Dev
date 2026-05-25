@@ -11,7 +11,7 @@ import '../services/activities_service.dart';
 import '../services/signups_service.dart';
 import 'activity_format.dart';
 
-/// UC-19 Admin Create/Manage Activity + UC-20 Mark Complete.
+/// UC-21 Admin Create Activity + UC-22 Mark Complete.
 /// Admin/NGO only — Firestore rules independently reject non-admins.
 class AdminManageActivityScreen extends StatelessWidget {
   AdminManageActivityScreen({super.key});
@@ -129,15 +129,7 @@ class _AdminActivityCard extends StatelessWidget {
               const Spacer(),
               if (activity.status == ActivityStatus.upcoming)
                 TextButton(
-                  onPressed: () async {
-                    await activitiesService.markComplete(activity.id);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Activity marked complete.')),
-                      );
-                    }
-                  },
+                  onPressed: () => _confirmComplete(context),
                   child: const Text('Mark Complete'),
                 ),
             ],
@@ -145,6 +137,40 @@ class _AdminActivityCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // UC-22: confirm before marking complete (irreversible — closes sign-ups).
+  Future<void> _confirmComplete(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mark activity complete?'),
+        content: const Text(
+            'Volunteers can no longer sign up, and this cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Mark Complete')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      await activitiesService.markComplete(activity.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Activity marked complete.')),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Couldn't mark complete. Please try again."),
+        backgroundColor: AppColors.error,
+      ));
+    }
   }
 
   void _showVolunteers(BuildContext context) {
@@ -269,6 +295,19 @@ class _CreateActivitySheetState extends State<_CreateActivitySheet> {
     ));
   }
 
+  // The global input theme is borderless-filled (relies on background
+  // contrast). On this near-white bottom sheet the faint fill is invisible,
+  // so give the fields a soft visible outline. Maroon focus + red error still
+  // come from the theme.
+  InputDecoration _fieldDec(String label, {String? hint}) => InputDecoration(
+        labelText: label,
+        hintText: hint,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: AppRadius.inputRadius,
+          borderSide: const BorderSide(color: AppColors.surfaceDim),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -289,20 +328,20 @@ class _CreateActivitySheetState extends State<_CreateActivitySheet> {
               const SizedBox(height: AppSpacing.stackMd),
               TextFormField(
                 controller: _title,
-                decoration: const InputDecoration(labelText: 'Title'),
+                decoration: _fieldDec('Title'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: AppSpacing.stackSm),
               TextFormField(
                 controller: _description,
-                decoration: const InputDecoration(labelText: 'Description'),
+                decoration: _fieldDec('Description'),
                 maxLines: 3,
               ),
               const SizedBox(height: AppSpacing.stackSm),
               TextFormField(
                 controller: _location,
-                decoration: const InputDecoration(labelText: 'Location'),
+                decoration: _fieldDec('Location'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
@@ -310,8 +349,7 @@ class _CreateActivitySheetState extends State<_CreateActivitySheet> {
               TextFormField(
                 controller: _slots,
                 keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Number of slots'),
+                decoration: _fieldDec('Number of slots'),
                 validator: (v) {
                   final n = int.tryParse(v ?? '');
                   if (n == null || n <= 0) return 'Enter a positive number';

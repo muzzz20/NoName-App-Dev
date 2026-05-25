@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,6 +21,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = AuthService();
   late Future<UserProfile?> _profileFuture;
+  late final Future<_ProfileCounts> _countsFuture = _loadCounts();
 
   @override
   void initState() {
@@ -26,9 +29,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profileFuture = _auth.loadProfile();
   }
 
+  /// Live activity counts for the stats row, scoped to the current user.
+  /// Each is a single-field equality count() — uses the automatic index,
+  /// and each filter satisfies that collection's read rule (own data).
+  Future<_ProfileCounts> _loadCounts() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const _ProfileCounts();
+    final db = FirebaseFirestore.instance;
+    final results = await Future.wait([
+      db.collection('reports').where('userId', isEqualTo: uid).count().get(),
+      db.collection('donations').where('donorId', isEqualTo: uid).count().get(),
+      db.collection('signups').where('volunteerId', isEqualTo: uid).count().get(),
+    ]);
+    return _ProfileCounts(
+      reports: results[0].count ?? 0,
+      donations: results[1].count ?? 0,
+      activities: results[2].count ?? 0,
+    );
+  }
+
   Future<void> _signOut() async {
     await _auth.logoutUser();
-    // Router redirect will move us to /login.
+    if (!mounted) return;
+    // Explicit nav (the redirect guard doesn't reliably fire for a pushed
+    // route). Sign-out drops to the public home feed as a visitor — the
+    // feed reacts to the auth change and shows the visitor state live.
+    context.go(AppRoutes.home);
+  }
+
+  Future<void> _openEditProfile() async {
+    await context.push(AppRoutes.editProfile);
+    // Refresh the header/name after returning from the edit form.
+    if (mounted) setState(() => _profileFuture = _auth.loadProfile());
   }
 
   @override
@@ -46,7 +78,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (profile == null) {
             return _ProfileMissing(onSignOut: _signOut);
           }
-          return _ProfileBody(profile: profile, onSignOut: _signOut);
+          return _ProfileBody(
+            profile: profile,
+            counts: _countsFuture,
+            onSignOut: _signOut,
+            onEdit: _openEditProfile,
+          );
         },
       ),
     );
@@ -55,8 +92,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 class _ProfileBody extends StatelessWidget {
   final UserProfile profile;
+  final Future<_ProfileCounts> counts;
   final VoidCallback onSignOut;
-  const _ProfileBody({required this.profile, required this.onSignOut});
+  final VoidCallback onEdit;
+  const _ProfileBody({
+    required this.profile,
+    required this.counts,
+    required this.onSignOut,
+    required this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -70,33 +114,38 @@ class _ProfileBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Stats (placeholder counts until NAD-14 wires real data)
-                _StatsRow(profile: profile),
+                // Live counts of the user's own activity across modules.
+                _StatsRow(counts: counts),
                 const SizedBox(height: AppSpacing.stackLg),
 
+                _MenuTile(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit Profile',
+                  onTap: onEdit,
+                ),
                 _MenuTile(
                   icon: Icons.history,
                   label: 'My Reports',
                   onTap: () => context.push(AppRoutes.myReports),
                 ),
                 _MenuTile(
-                  icon: Icons.handshake_outlined,
-                  label: 'Volunteer History',
-                  subtitle: 'Sprint 3 — coming soon',
-                  enabled: false,
+                  icon: Icons.receipt_long_outlined,
+                  label: 'My Donations',
+                  onTap: () => context.push(AppRoutes.myDonations),
                 ),
                 _MenuTile(
-                  icon: Icons.favorite_border,
-                  label: 'Favorites',
-                  subtitle: 'Sprint 3 — coming soon',
-                  enabled: false,
+                  icon: Icons.event_available_outlined,
+                  label: 'My Activities',
+                  onTap: () => context.push(AppRoutes.myActivities),
                 ),
-                _MenuTile(
-                  icon: Icons.settings_outlined,
-                  label: 'Account Settings',
-                  subtitle: 'Sprint 4 — coming soon',
-                  enabled: false,
-                ),
+                // Stakeholder dashboard (UC-23 / C3) — single role-gated entry
+                // point for admin/NGO. (Router also guards /dashboard.)
+                if (profile.role == 'admin' || profile.role == 'ngo')
+                  _MenuTile(
+                    icon: Icons.dashboard_outlined,
+                    label: 'Stakeholder Dashboard',
+                    onTap: () => context.push(AppRoutes.dashboard),
+                  ),
 
                 const SizedBox(height: AppSpacing.stackXl),
 
@@ -162,13 +211,6 @@ class _MaroonHeader extends StatelessWidget {
                     ),
                   ),
                 ),
-                _GlassIconButton(
-                  icon: Icons.settings_outlined,
-                  onPressed: () {
-                    // Sprint 4 (NAD-65) — Account Settings screen
-                  },
-                  tooltip: 'Settings',
-                ),
               ],
             ),
             const SizedBox(height: AppSpacing.stackLg),
@@ -177,12 +219,17 @@ class _MaroonHeader extends StatelessWidget {
                 CircleAvatar(
                   radius: 38,
                   backgroundColor: AppColors.onPrimary.withValues(alpha: 0.18),
-                  child: Text(
-                    _initials(profile.fullName),
-                    style: AppText.headlineMd.copyWith(
-                      color: AppColors.onPrimary,
-                    ),
-                  ),
+                  backgroundImage: profile.photoUrl != null
+                      ? NetworkImage(profile.photoUrl!)
+                      : null,
+                  child: profile.photoUrl == null
+                      ? Text(
+                          _initials(profile.fullName),
+                          style: AppText.headlineMd.copyWith(
+                            color: AppColors.onPrimary,
+                          ),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: AppSpacing.stackLg),
                 Expanded(
@@ -238,9 +285,20 @@ class _MaroonHeader extends StatelessWidget {
   }
 }
 
+class _ProfileCounts {
+  final int reports;
+  final int donations;
+  final int activities;
+  const _ProfileCounts({
+    this.reports = 0,
+    this.donations = 0,
+    this.activities = 0,
+  });
+}
+
 class _StatsRow extends StatelessWidget {
-  final UserProfile profile;
-  const _StatsRow({required this.profile});
+  final Future<_ProfileCounts> counts;
+  const _StatsRow({required this.counts});
 
   @override
   Widget build(BuildContext context) {
@@ -250,32 +308,40 @@ class _StatsRow extends StatelessWidget {
           vertical: AppSpacing.stackMd,
           horizontal: AppSpacing.stackSm,
         ),
-        child: Row(
-          children: const [
-            Expanded(
-              child: _StatTile(
-                icon: Icons.history,
-                value: '—',
-                label: 'Reports',
-              ),
-            ),
-            _StatDivider(),
-            Expanded(
-              child: _StatTile(
-                icon: Icons.emoji_events_outlined,
-                value: '—',
-                label: 'Points',
-              ),
-            ),
-            _StatDivider(),
-            Expanded(
-              child: _StatTile(
-                icon: Icons.favorite_border,
-                value: '—',
-                label: 'Saved',
-              ),
-            ),
-          ],
+        child: FutureBuilder<_ProfileCounts>(
+          future: counts,
+          builder: (context, snap) {
+            final c = snap.data;
+            // '—' while loading / on error; real counts once resolved.
+            String v(int? n) => n == null ? '—' : '$n';
+            return Row(
+              children: [
+                Expanded(
+                  child: _StatTile(
+                    icon: Icons.history,
+                    value: v(c?.reports),
+                    label: 'Reports',
+                  ),
+                ),
+                const _StatDivider(),
+                Expanded(
+                  child: _StatTile(
+                    icon: Icons.volunteer_activism_outlined,
+                    value: v(c?.donations),
+                    label: 'Donations',
+                  ),
+                ),
+                const _StatDivider(),
+                Expanded(
+                  child: _StatTile(
+                    icon: Icons.event_available_outlined,
+                    value: v(c?.activities),
+                    label: 'Activities',
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -325,14 +391,10 @@ class _StatDivider extends StatelessWidget {
 class _MenuTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String? subtitle;
-  final bool enabled;
   final VoidCallback? onTap;
   const _MenuTile({
     required this.icon,
     required this.label,
-    this.subtitle,
-    this.enabled = true,
     this.onTap,
   });
 
@@ -343,7 +405,7 @@ class _MenuTile extends StatelessWidget {
       child: Card(
         child: InkWell(
           borderRadius: AppRadius.cardRadius,
-          onTap: enabled ? onTap : null,
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.stackMd,
@@ -351,34 +413,15 @@ class _MenuTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  color: enabled ? AppColors.primary : AppColors.outline,
-                ),
+                Icon(icon, color: AppColors.primary),
                 const SizedBox(width: AppSpacing.stackMd),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: AppText.bodyBase.copyWith(
-                          color: enabled
-                              ? AppColors.onSurface
-                              : AppColors.outline,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (subtitle != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            subtitle!,
-                            style: AppText.bodySm
-                                .copyWith(color: AppColors.outline),
-                          ),
-                        ),
-                    ],
+                  child: Text(
+                    label,
+                    style: AppText.bodyBase.copyWith(
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 Icon(

@@ -37,7 +37,7 @@ class _StakeholderDashboardScreenState
   }
 
   void _refresh() {
-    _statsF = _dashboard.getStats();
+    _statsF = _dashboard.getDashboardStats();
     _trendF = _dashboard.getDonationTrend();
   }
 
@@ -50,13 +50,6 @@ class _StakeholderDashboardScreenState
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(_refresh),
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async => setState(_refresh),
@@ -66,6 +59,12 @@ class _StakeholderDashboardScreenState
             FutureBuilder<DashboardStats>(
               future: _statsF,
               builder: (context, snap) {
+                if (snap.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpacing.stackXl),
+                    child: Center(child: Text("Couldn't load dashboard stats.")),
+                  );
+                }
                 if (!snap.hasData) {
                   return const Padding(
                     padding: EdgeInsets.all(AppSpacing.stackXl),
@@ -78,79 +77,88 @@ class _StakeholderDashboardScreenState
                   KpiItem('Funds raised',
                       'RM ${(s.totalFundsRaisedSen / 100).toStringAsFixed(2)}',
                       Icons.volunteer_activism),
-                  KpiItem('Active campaigns', '${s.activeCampaigns}',
-                      Icons.campaign),
+                  KpiItem('Campaigns', '${s.totalCampaigns}', Icons.campaign),
                   KpiItem('Donations', '${s.totalDonations}', Icons.payments),
                   KpiItem('Activities', '${s.totalActivities}', Icons.event),
-                  KpiItem('Volunteer sign-ups', '${s.totalSignups}',
-                      Icons.group),
+                  KpiItem('Users', '${s.totalUsers}', Icons.group),
                 ]);
               },
             ),
             const SizedBox(height: AppSpacing.stackLg),
-            Text('Donations — last 30 days', style: AppText.titleSm),
-            const SizedBox(height: AppSpacing.stackMd),
-            FutureBuilder<List<DailyDonation>>(
-              future: _trendF,
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const SizedBox(
+            DashboardSection(
+              title: 'Donations — last 30 days',
+              child: FutureBuilder<List<DailyDonation>>(
+                future: _trendF,
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    return const SizedBox(
                       height: 120,
-                      child: Center(child: CircularProgressIndicator()));
-                }
-                return DonationSparkline(data: snap.data!);
-              },
+                      child: Center(
+                          child: Text("Couldn't load the donation trend.")),
+                    );
+                  }
+                  if (!snap.hasData) {
+                    return const SizedBox(
+                        height: 120,
+                        child: Center(child: CircularProgressIndicator()));
+                  }
+                  return DonationSparkline(data: snap.data!);
+                },
+              ),
             ),
             const SizedBox(height: AppSpacing.stackLg),
-            Text('Active campaigns', style: AppText.titleSm),
-            const SizedBox(height: AppSpacing.stackMd),
-            StreamBuilder<List<Campaign>>(
-              stream: _campaigns.watchActiveCampaigns(limit: 5),
-              builder: (context, snap) {
-                final campaigns = snap.data ?? [];
-                if (campaigns.isEmpty) {
-                  return _muted('No active campaigns.');
-                }
-                return Column(
-                  children: campaigns
-                      .map((c) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.campaign_outlined),
-                            title: Text(c.title,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(
-                                'RM ${(c.currentAmountSen / 100).toStringAsFixed(2)} / RM ${(c.goalAmountSen / 100).toStringAsFixed(2)}'),
-                            onTap: () => context.push('/campaign/${c.id}'),
-                          ))
-                      .toList(),
-                );
-              },
+            DashboardSection(
+              title: 'Active campaigns',
+              child: StreamBuilder<List<Campaign>>(
+                stream: _campaigns.watchActiveCampaigns(limit: 5),
+                builder: (context, snap) {
+                  final campaigns = snap.data ?? [];
+                  if (campaigns.isEmpty) {
+                    return _muted('No active campaigns.');
+                  }
+                  return Column(
+                    children: campaigns
+                        .map((c) => ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.campaign_outlined),
+                              title: Text(c.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                  'RM ${(c.currentAmountSen / 100).toStringAsFixed(2)} / RM ${(c.goalAmountSen / 100).toStringAsFixed(2)}'),
+                              onTap: () => context.push('/campaign/${c.id}'),
+                            ))
+                        .toList(),
+                  );
+                },
+              ),
             ),
             const SizedBox(height: AppSpacing.stackLg),
-            Text('Recent reports', style: AppText.titleSm),
-            const SizedBox(height: AppSpacing.stackMd),
-            StreamBuilder<List<CatReport>>(
-              stream: _reports.watchAllReports(limit: 5),
-              builder: (context, snap) {
-                final reports = snap.data ?? [];
-                if (reports.isEmpty) return _muted('No reports yet.');
-                return Column(
-                  children: reports
-                      .map((r) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.pets_outlined),
-                            title: Text(r.condition.label),
-                            subtitle: Text(
-                                r.locationLabel ?? r.description,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                            onTap: () => context.push('/report/${r.id}'),
-                          ))
-                      .toList(),
-                );
-              },
+            DashboardSection(
+              title: 'Recent reports',
+              child: StreamBuilder<List<CatReport>>(
+                stream: _reports.watchAllReports(limit: 5),
+                builder: (context, snap) {
+                  final reports = snap.data ?? [];
+                  if (reports.isEmpty) return _muted('No reports yet.');
+                  return Column(
+                    children: reports
+                        .map((r) => ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.pets_outlined),
+                              title: Text(r.condition.label),
+                              subtitle: Text(
+                                  r.locationLabel ?? r.description,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              onTap: () => context.push('/report/${r.id}'),
+                            ))
+                        .toList(),
+                  );
+                },
+              ),
             ),
             const SizedBox(height: AppSpacing.stackXl),
           ],

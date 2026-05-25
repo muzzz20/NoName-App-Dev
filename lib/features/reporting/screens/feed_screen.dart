@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
+import '../../../core/widgets/sign_in_prompt.dart';
 import '../../auth/models/user_profile.dart';
 import '../../auth/services/auth_service.dart';
 import '../../dashboard/services/dashboard_service.dart';
@@ -53,12 +56,28 @@ class _FeedScreenState extends State<FeedScreen> {
   UserProfile? _profile;
 
   bool get _isSignedIn => FirebaseAuth.instance.currentUser != null;
-  bool get _isAdmin => _profile?.role == 'admin' || _profile?.role == 'ngo';
+
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    // React to auth changes (register / login / logout) so the appbar,
+    // hero greeting and quick-links update live — this screen is the
+    // persistent root, so it must not rely on a one-shot read. The stream
+    // also emits the current state immediately on subscribe, covering the
+    // initial build.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) return;
+      setState(() => _profile = null);
+      if (user != null) _loadProfile();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -76,15 +95,7 @@ class _FeedScreenState extends State<FeedScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 
-  void _requireSignIn(String action) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Sign in to $action.'),
-      action: SnackBarAction(
-        label: 'Sign In',
-        onPressed: () => context.push(AppRoutes.login),
-      ),
-    ));
-  }
+  void _requireSignIn(String action) => showSignInPrompt(context, action);
 
   @override
   Widget build(BuildContext context) {
@@ -121,11 +132,11 @@ class _FeedScreenState extends State<FeedScreen> {
               children: [
                 _hero(),
                 _statsStrip(),
-                const SizedBox(height: AppSpacing.stackLg),
-                _ctaRow(),
+                _publicStatsLink(),
                 const SizedBox(height: AppSpacing.stackMd),
+                _ctaRow(),
+                const SizedBox(height: AppSpacing.stackXl),
                 _featuredCampaign(),
-                if (_isSignedIn) _quickLinks(),
                 _reportsHeader(),
                 ..._reportsBody(snapshot, reports),
                 const SizedBox(height: 96),
@@ -163,9 +174,6 @@ class _FeedScreenState extends State<FeedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Strayfriends @ UTM',
-              style: AppText.bodySm.copyWith(color: AppColors.onPrimaryContainer)),
-          const SizedBox(height: 6),
           Text(
             _isSignedIn
                 ? 'Welcome back,\n${_profile?.fullName ?? 'friend'}.'
@@ -248,6 +256,25 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
+  // ── Public-stats entry (visitor path to the "Our Impact" page) ──────
+  Widget _publicStatsLink() {
+    return Center(
+      child: TextButton(
+        onPressed: () => context.push(AppRoutes.publicStats),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('See our full impact',
+                style: AppText.bodySm.copyWith(
+                    fontWeight: FontWeight.w600, color: AppColors.primary)),
+            const Icon(Icons.chevron_right,
+                size: 18, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Primary CTAs ────────────────────────────────────────────────────
   Widget _ctaRow() {
     return Padding(
@@ -266,11 +293,10 @@ class _FeedScreenState extends State<FeedScreen> {
               () => context.push(AppRoutes.campaigns)),
           const SizedBox(width: AppSpacing.stackSm),
           _ctaCard('Volunteer', Icons.diversity_3,
-              const [Color(0xFFB5482F), Color(0xFF7A2A18)], () {
-            _isSignedIn
-                ? context.push(AppRoutes.activities)
-                : _requireSignIn('volunteer');
-          }),
+              const [Color(0xFFB5482F), Color(0xFF7A2A18)],
+              // Browsing activities is public; signing up is gated on the
+              // activity detail screen.
+              () => context.push(AppRoutes.activities)),
         ],
       ),
     );
@@ -313,6 +339,50 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
+  // ── Shared section header (accent bar + title + "View all") ─────────
+  // Gives each feed section a clear visual start without a full-width
+  // divider line (the divider approach was reverted in 3995076).
+  Widget _sectionHeaderRow(String title, VoidCallback onViewAll) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 4,
+              height: 22,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.stackSm),
+            Text(title,
+                style: AppText.titleSm.copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        InkWell(
+          onTap: onViewAll,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Text('View all',
+                    style: AppText.bodySm.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+                const Icon(Icons.chevron_right,
+                    size: 18, color: AppColors.primary),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ── Featured campaign ───────────────────────────────────────────────
   Widget _featuredCampaign() {
     return StreamBuilder<List<Campaign>>(
@@ -325,33 +395,12 @@ class _FeedScreenState extends State<FeedScreen> {
         final daysLeft = c.endsAt?.difference(DateTime.now()).inDays;
         return Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.stackLg, 0,
-              AppSpacing.stackLg, AppSpacing.stackLg),
+              AppSpacing.stackLg, AppSpacing.stackXl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Featured campaign', style: AppText.titleSm),
-                  InkWell(
-                    onTap: () => context.push(AppRoutes.campaigns),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          Text('View all',
-                              style: AppText.bodySm.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary)),
-                          const Icon(Icons.chevron_right,
-                              size: 18, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              _sectionHeaderRow(
+                  'Featured campaign', () => context.push(AppRoutes.campaigns)),
               const SizedBox(height: AppSpacing.stackSm),
               InkWell(
                 onTap: () => context.push('/campaign/${c.id}'),
@@ -493,78 +542,13 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  // ── Role-aware quick links (signed-in) ──────────────────────────────
-  Widget _quickLinks() {
-    final items = <_NavItem>[
-      _NavItem('My Reports', Icons.history, () => context.push(AppRoutes.myReports)),
-      _NavItem('My Donations', Icons.receipt_long,
-          () => context.push(AppRoutes.myDonations)),
-      _NavItem('My Activities', Icons.event_available,
-          () => context.push(AppRoutes.myActivities)),
-      if (_isAdmin) ...[
-        _NavItem('Dashboard', Icons.dashboard,
-            () => context.push(AppRoutes.dashboard)),
-        _NavItem('New Campaign', Icons.add_business,
-            () => context.push(AppRoutes.adminCampaign)),
-        _NavItem('New Activity', Icons.add_task,
-            () => context.push(AppRoutes.adminActivity)),
-      ],
-    ];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.stackLg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
-                AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
-            child: _QuickLinksLabel(),
-          ),
-          SizedBox(
-            height: 88,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.stackLg),
-              itemCount: items.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: AppSpacing.stackSm),
-              itemBuilder: (context, i) => _NavTile(item: items[i]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Reports ─────────────────────────────────────────────────────────
   Widget _reportsHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.stackLg, 0, AppSpacing.stackLg, AppSpacing.stackSm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('Recent Reports', style: AppText.titleSm),
-          InkWell(
-            onTap: () => context.push(AppRoutes.reports),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  Text('View all',
-                      style: AppText.bodySm.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
-                  const Icon(Icons.chevron_right,
-                      size: 18, color: AppColors.primary),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: _sectionHeaderRow(
+          'Recent Reports', () => context.push(AppRoutes.reports)),
     );
   }
 
@@ -573,9 +557,14 @@ class _FeedScreenState extends State<FeedScreen> {
     if (snapshot.hasError) {
       return [
         Padding(
-          padding: AppSpacing.pagePadding,
-          child: Text('Could not load reports: ${snapshot.error}',
-              style: AppText.bodySm.copyWith(color: AppColors.outline)),
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: _FeedNotice(
+            icon: Icons.cloud_off_outlined,
+            title: "Couldn't load reports",
+            message: 'Check your connection and try again.',
+            actionLabel: 'Retry',
+            onAction: _refresh,
+          ),
         ),
       ];
     }
@@ -589,10 +578,20 @@ class _FeedScreenState extends State<FeedScreen> {
       ];
     }
     if (reports.isEmpty) {
-      return const [
+      return [
         Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: _EmptyState(),
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: _FeedNotice(
+            icon: Icons.pets_outlined,
+            title: 'No reports yet',
+            message: _isSignedIn
+                ? 'Be the first to report a stray cat on campus.'
+                : 'Sign in to be the first to report a stray cat on campus.',
+            actionLabel: _isSignedIn ? 'Report a cat' : 'Sign In',
+            onAction: () => _isSignedIn
+                ? context.push(AppRoutes.submitReport)
+                : _requireSignIn('report a cat'),
+          ),
         ),
       ];
     }
@@ -615,56 +614,22 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 }
 
-class _NavItem {
-  final String label;
+
+/// Shared placeholder for the reports section — used for both the empty
+/// state and load errors, with an optional call-to-action button.
+class _FeedNotice extends StatelessWidget {
   final IconData icon;
-  final VoidCallback onTap;
-  _NavItem(this.label, this.icon, this.onTap);
-}
-
-class _NavTile extends StatelessWidget {
-  final _NavItem item;
-  const _NavTile({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: item.onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Container(
-        width: 96,
-        padding: const EdgeInsets.all(AppSpacing.stackSm),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(item.icon, color: AppColors.primary, size: 24),
-            const SizedBox(height: 6),
-            Text(item.label,
-                style: AppText.bodySm,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickLinksLabel extends StatelessWidget {
-  const _QuickLinksLabel();
-  @override
-  Widget build(BuildContext context) =>
-      Align(alignment: Alignment.centerLeft, child: Text('Quick links', style: AppText.titleSm));
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  const _FeedNotice({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -672,14 +637,17 @@ class _EmptyState extends StatelessWidget {
       padding: AppSpacing.pagePadding,
       child: Column(
         children: [
-          const Icon(Icons.pets_outlined, size: 64, color: AppColors.outline),
-          const SizedBox(height: AppSpacing.stackLg),
-          Text('No reports yet',
-              style: AppText.titleSm, textAlign: TextAlign.center),
+          Icon(icon, size: 56, color: AppColors.outline),
+          const SizedBox(height: AppSpacing.stackMd),
+          Text(title, style: AppText.titleSm, textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.stackSm),
-          Text('Be the first to report a stray cat on campus.',
+          Text(message,
               style: AppText.bodySm.copyWith(color: AppColors.outline),
               textAlign: TextAlign.center),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: AppSpacing.stackLg),
+            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
         ],
       ),
     );

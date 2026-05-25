@@ -4,10 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/screens/edit_profile_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/profile_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
+import '../../features/auth/services/auth_service.dart';
+import '../../features/reporting/models/cat_report.dart';
 import '../../features/reporting/screens/feed_screen.dart';
 import '../../features/reporting/screens/my_reports_screen.dart';
 import '../../features/reporting/screens/report_detail_screen.dart';
@@ -39,12 +42,13 @@ class AppRoutes {
   static const register = '/register';
   static const home = '/home';
   static const profile = '/profile';
+  static const editProfile = '/profile/edit';
   static const submitReport = '/report/new';
   static const reportSuccess = '/report/success';
   static const reportDetail = '/report'; // /report/:id
   static const reports = '/reports'; // full public feed
   static const myReports = '/my-reports';
-  
+
   // Fundraising routes
   static const campaigns = '/campaigns';
   static const campaignDetail = '/campaign'; // /campaign/:id
@@ -67,18 +71,21 @@ class AppRoutes {
   static const help = '/help';
 }
 
-/// Routes a visitor (not signed in) may view without logging in. These
-/// mirror the SRDD's Visitor actor: public feed (UC-06) + full reports
-/// list, report detail (UC-07), browse campaigns + campaign detail
-/// (UC-10/11), and public stats. Volunteer activities (UC-17/18) are
-/// Registered-only per the SRDD, so they are NOT public. Auth-only
-/// actions on public screens (donate, report) prompt sign-in; everything
-/// else (profile, submit, volunteer, my-*, admin-*, receipt) stays gated.
+/// Routes a visitor (not signed in) may view without logging in: public
+/// feed (UC-06) + full reports list, report detail (UC-07), browse campaigns
+/// + campaign detail (UC-10/11), browse activities + activity detail
+/// (UC-17/18), and public stats. Principle: VIEW is open, ACTION is gated —
+/// auth-only actions on these screens (donate, sign up, report) prompt
+/// sign-in; everything else (profile, submit, my-*, admin-*, receipt) stays
+/// behind login.
 bool _isPublicRoute(String location) {
   if (location == AppRoutes.home) return true;
   if (location == AppRoutes.reports) return true;
   if (location == AppRoutes.campaigns) return true;
   if (location.startsWith('${AppRoutes.campaignDetail}/')) return true;
+  // Volunteer activities are public to browse (UC-17/18); sign-up is gated.
+  if (location == AppRoutes.activities) return true;
+  if (location.startsWith('${AppRoutes.activityDetail}/')) return true;
   if (location == AppRoutes.publicStats) return true;
   if (location == AppRoutes.help) return true;
   // Report detail is public, but /report/new + /report/success are not.
@@ -90,6 +97,12 @@ bool _isPublicRoute(String location) {
   return false;
 }
 
+/// Routes restricted to the Admin / NGO role (UC-09, 15/16, 21/22, 23).
+bool _isAdminRoute(String location) =>
+    location == AppRoutes.adminCampaign ||
+    location == AppRoutes.adminActivity ||
+    location == AppRoutes.dashboard;
+
 /// Router with FirebaseAuth-driven redirect guard.
 ///
 /// - Visitors may view public routes (see [_isPublicRoute]); other
@@ -97,10 +110,10 @@ bool _isPublicRoute(String location) {
 /// - Authenticated users at `/login` or `/register` → `/home`.
 /// - `/` (splash) always resolves to the public `/home` feed.
 GoRouter buildAppRouter() {
-  final authStream = FirebaseAuth.instance.authStateChanges();
+  final appAuth = AppAuth();
   return GoRouter(
     initialLocation: AppRoutes.splash,
-    refreshListenable: GoRouterRefreshStream(authStream),
+    refreshListenable: appAuth,
     redirect: (context, state) {
       final isSignedIn = FirebaseAuth.instance.currentUser != null;
       final location = state.matchedLocation;
@@ -119,6 +132,15 @@ GoRouter buildAppRouter() {
       // Visitors may view public routes; anything else → login.
       if (!isSignedIn && !atAuthScreen && !_isPublicRoute(location)) {
         return AppRoutes.login;
+      }
+      // Admin/NGO-only routes: a signed-in non-admin is bounced home once
+      // their role resolves. firestore.rules are the real enforcement; this
+      // keeps the UI from exposing admin screens to regular users.
+      if (isSignedIn &&
+          _isAdminRoute(location) &&
+          appAuth.roleResolved &&
+          !appAuth.isAdmin) {
+        return AppRoutes.home;
       }
       return null;
     },
@@ -144,8 +166,13 @@ GoRouter buildAppRouter() {
         builder: (_, _) => const ProfileScreen(),
       ),
       GoRoute(
+        path: AppRoutes.editProfile,
+        builder: (_, _) => const EditProfileScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.submitReport,
-        builder: (_, _) => const SubmitReportScreen(),
+        builder: (_, state) =>
+            SubmitReportScreen(existing: state.extra as CatReport?),
       ),
       GoRoute(
         path: AppRoutes.reportSuccess,
@@ -234,17 +261,42 @@ GoRouter buildAppRouter() {
   );
 }
 
-/// Bridges a [Stream] to GoRouter's refresh mechanism, so route guards
-/// re-run whenever auth state changes.
-class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    notifyListeners();
-    _subscription = stream.asBroadcastStream().listen(
-          (_) => notifyListeners(),
-        );
+/// Auth + role state that drives GoRouter's redirect guard. Re-runs the
+/// guard on sign-in/out AND once the user's role resolves, so role-gated
+/// (admin/ngo) routes can be enforced synchronously in [redirect]. The role
+/// is read from Firestore once per auth change and cached.
+class AppAuth extends ChangeNotifier {
+  AppAuth() {
+    _subscription =
+        FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
   }
 
-  late final StreamSubscription<dynamic> _subscription;
+  final _authService = AuthService();
+  late final StreamSubscription<User?> _subscription;
+
+  String? _role;
+
+  /// True once the role for the current auth state is known (immediately for
+  /// signed-out; after the profile read for signed-in). Until then the admin
+  /// guard holds off so an admin isn't wrongly bounced mid-load.
+  bool roleResolved = false;
+
+  bool get isAdmin => _role == 'admin' || _role == 'ngo';
+
+  Future<void> _onAuthChanged(User? user) async {
+    _role = null;
+    roleResolved = user == null;
+    notifyListeners(); // sign-in/out happened
+    if (user != null) {
+      try {
+        _role = (await _authService.loadProfile())?.role;
+      } catch (_) {
+        _role = null;
+      }
+      roleResolved = true;
+      notifyListeners(); // role now known → guard can act
+    }
+  }
 
   @override
   void dispose() {

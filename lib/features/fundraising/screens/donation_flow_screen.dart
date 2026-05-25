@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -78,7 +79,13 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
         amountSen: (amount * 100).round(),
         campaignId: widget.campaignId,
         donorName: donorName,
-        origin: Uri.base.origin,
+        // Stripe success/cancel URLs need a valid absolute http(s) origin.
+        // On web that's the live origin; on mobile `Uri.base.origin` throws
+        // (file:// scheme), so use the hosted web URL — the donation is still
+        // recorded server-side by the Stripe webhook regardless of redirect.
+        origin: kIsWeb
+            ? Uri.base.origin
+            : 'https://strayfriends-utm.web.app',
       );
       // On web we've navigated away by now; this line only runs on
       // platforms where the launch returns control. Keep the spinner
@@ -184,7 +191,7 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
             children: [
               SafeArea(
                 child: SingleChildScrollView(
-                  padding: AppSpacing.pagePadding,
+                  padding: AppSpacing.pagePadding.copyWith(bottom: 96),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -221,6 +228,33 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                                     overflow: TextOverflow.ellipsis),
                               ],
                             ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.stackMd),
+                      // Progress for context — how close this campaign is.
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                        child: LinearProgressIndicator(
+                          value: campaign.progress,
+                          minHeight: 8,
+                          backgroundColor: AppColors.surfaceVariant,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'RM ${(campaign.currentAmountSen / 100).toStringAsFixed(0)} raised',
+                            style: AppText.bodySm
+                                .copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            'of RM ${(campaign.goalAmountSen / 100).toStringAsFixed(0)} goal',
+                            style: AppText.bodySm
+                                .copyWith(color: AppColors.secondary),
                           ),
                         ],
                       ),
@@ -268,7 +302,7 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                                     style: AppText.bodyBase.copyWith(
                                       fontWeight: FontWeight.w600,
                                       color: isSelected
-                                          ? AppColors.onPrimaryContainer
+                                          ? AppColors.onPrimary
                                           : AppColors.onSurface,
                                     ),
                                   ),
@@ -319,13 +353,30 @@ class _DonationFlowScreenState extends State<DonationFlowScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: AppSpacing.stackXl),
-                      ElevatedButton.icon(
-                        onPressed: _proceedToPayment,
-                        icon: const Icon(Icons.lock),
-                        label: const Text('Proceed to Secure Payment'),
-                      ),
                     ],
+                  ),
+                ),
+              ),
+              // Sticky payment CTA — no dead space, always reachable.
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: AppSpacing.pagePadding.copyWith(
+                    top: AppSpacing.stackMd,
+                    bottom: AppSpacing.containerPadding +
+                        MediaQuery.of(context).padding.bottom,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    border:
+                        Border(top: BorderSide(color: AppColors.cardBorder)),
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _proceedToPayment,
+                    icon: const Icon(Icons.lock),
+                    label: const Text('Proceed to Secure Payment'),
                   ),
                 ),
               ),

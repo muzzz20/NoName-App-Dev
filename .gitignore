@@ -66,6 +66,9 @@ serviceAccountKey.json
 
 # Cloud Functions (NAD-26)
 functions/node_modules/
+
+# Local Claude settings / worktrees — not shared
+.claude/
 functions/.eslintcache
 functions/firebase-debug.log
 functions/firebase-debug.*.log

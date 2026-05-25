@@ -11,8 +11,8 @@ import '../services/activities_service.dart';
 import '../services/signups_service.dart';
 import 'activity_format.dart';
 
-/// UC-18 My Activities. The volunteer's joined activities, split into
-/// upcoming and past sections.
+/// UC-20 My Activities. The volunteer's joined activities in one list
+/// (newest first); past ones are tagged with a "Past" pill.
 class MyActivitiesScreen extends StatelessWidget {
   MyActivitiesScreen({super.key});
 

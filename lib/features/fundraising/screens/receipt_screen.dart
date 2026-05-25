@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -27,6 +30,27 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   final _donationsService = DonationsService();
   final _campaignsService = CampaignsService();
 
+  // Safety net: the webhook usually lands in 1-2s. If it hasn't after this,
+  // surface a way out instead of spinning forever.
+  bool _slow = false;
+  Timer? _slowTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.sessionId.isNotEmpty) {
+      _slowTimer = Timer(const Duration(seconds: 12), () {
+        if (mounted) setState(() => _slow = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _slowTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.sessionId.isEmpty) {
@@ -34,14 +58,35 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
 
     return _Shell(
-      child: StreamBuilder<Donation?>(
-        stream: _donationsService.watchDonationBySession(widget.sessionId),
-        builder: (context, snap) {
-          final donation = snap.data;
-          if (donation == null) {
+      // Returning from Stripe is a full page reload on web; wait for Firebase
+      // Auth to restore before querying — the donations read rule needs the
+      // signed-in uid (we filter by donorId to satisfy it).
+      child: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, authSnap) {
+          if (authSnap.connectionState == ConnectionState.waiting) {
             return _confirming();
           }
-          return _receipt(context, donation);
+          final uid = authSnap.data?.uid;
+          if (uid == null) {
+            return _signInToView(context);
+          }
+          return StreamBuilder<Donation?>(
+            stream: _donationsService.watchDonationBySession(
+              sessionId: widget.sessionId,
+              donorId: uid,
+            ),
+            builder: (context, snap) {
+              if (snap.hasError) {
+                return _error(context);
+              }
+              final donation = snap.data;
+              if (donation == null) {
+                return _confirming();
+              }
+              return _receipt(context, donation);
+            },
+          );
         },
       ),
     );
@@ -60,6 +105,67 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           'Hang tight — we are recording your donation.',
           style: AppText.bodyBase.copyWith(color: AppColors.secondary),
           textAlign: TextAlign.center,
+        ),
+        if (_slow) ...[
+          const SizedBox(height: AppSpacing.stackLg),
+          Text(
+            'Taking longer than expected. Your payment went through — the '
+            'receipt will appear under My Donations once recorded.',
+            style: AppText.bodySm.copyWith(color: AppColors.outline),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.stackMd),
+          OutlinedButton(
+            onPressed: () => context.go('/my-donations'),
+            child: const Text('Go to My Donations'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _signInToView(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.lock_outline, size: 64, color: AppColors.outline),
+        const SizedBox(height: AppSpacing.stackMd),
+        Text('Sign in to view your receipt',
+            style: AppText.titleSm, textAlign: TextAlign.center),
+        const SizedBox(height: AppSpacing.stackSm),
+        Text(
+          'Your payment was processed. Sign in with the account you donated '
+          'from to see the receipt.',
+          style: AppText.bodySm.copyWith(color: AppColors.secondary),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.stackLg),
+        FilledButton(
+          onPressed: () => context.go('/login'),
+          child: const Text('Sign In'),
+        ),
+      ],
+    );
+  }
+
+  Widget _error(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.cloud_off_outlined, size: 56, color: AppColors.outline),
+        const SizedBox(height: AppSpacing.stackMd),
+        Text("Couldn't load your receipt",
+            style: AppText.titleSm, textAlign: TextAlign.center),
+        const SizedBox(height: AppSpacing.stackSm),
+        Text(
+          'Your payment went through — find it under My Donations.',
+          style: AppText.bodySm.copyWith(color: AppColors.outline),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.stackLg),
+        OutlinedButton(
+          onPressed: () => context.go('/my-donations'),
+          child: const Text('Go to My Donations'),
         ),
       ],
     );

@@ -5,6 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../models/cat_report.dart';
 import 'condition_badge.dart';
+import 'status_badge.dart';
 
 /// Reusable list-tile card for a [CatReport]. Used by Feed (NAD-12) and
 /// My Reports (NAD-14).
@@ -117,7 +118,7 @@ class ReportCard extends StatelessWidget {
                         ),
                         if (showStatusBadge) ...[
                           const SizedBox(width: AppSpacing.stackMd),
-                          _StatusPill(status: report.status),
+                          StatusBadge(status: report.status, compact: true),
                         ],
                       ],
                     ),
@@ -140,41 +141,6 @@ class ReportCard extends StatelessWidget {
   String _formatLatLng(CatReport r) =>
       '${r.location.latitude.toStringAsFixed(4)}, '
       '${r.location.longitude.toStringAsFixed(4)}';
-}
-
-class _StatusPill extends StatelessWidget {
-  final ReportStatus status;
-  const _StatusPill({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, fg) = switch (status) {
-      ReportStatus.pending => (
-          AppColors.surfaceContainerHigh,
-          AppColors.onSurfaceVariant,
-        ),
-      ReportStatus.inProgress => (
-          AppColors.primaryContainer,
-          AppColors.onPrimary,
-        ),
-      ReportStatus.resolved => (
-          AppColors.tertiaryContainer,
-          AppColors.onTertiaryContainer,
-        ),
-      ReportStatus.rejected => (
-          AppColors.errorContainer,
-          AppColors.onErrorContainer,
-        ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: AppRadius.pillRadius),
-      child: Text(
-        status.label.toUpperCase(),
-        style: AppText.labelCaps.copyWith(color: fg, fontSize: 10),
-      ),
-    );
-  }
 }
 
 class _PhotoFallback extends StatelessWidget {

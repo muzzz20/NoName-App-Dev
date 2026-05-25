@@ -5,19 +5,39 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
+import '../../auth/models/user_profile.dart';
+import '../../auth/services/auth_service.dart';
 import '../models/activity.dart';
 import '../services/activities_service.dart';
 import 'activity_format.dart';
 
-/// UC-16 Browse Activities. Lists upcoming volunteer activities.
-class ActivitiesListScreen extends StatelessWidget {
-  ActivitiesListScreen({super.key});
+/// UC-17 Browse Activities. Lists upcoming volunteer activities.
+class ActivitiesListScreen extends StatefulWidget {
+  const ActivitiesListScreen({super.key});
 
+  @override
+  State<ActivitiesListScreen> createState() => _ActivitiesListScreenState();
+}
+
+class _ActivitiesListScreenState extends State<ActivitiesListScreen> {
   final _service = ActivitiesService();
+  final _authService = AuthService();
+  UserProfile? _profile;
+
+  bool get _isAdmin => _profile?.role == 'admin' || _profile?.role == 'ngo';
+
+  @override
+  void initState() {
+    super.initState();
+    if (FirebaseAuth.instance.currentUser != null) {
+      _authService.loadProfile().then((p) {
+        if (mounted) setState(() => _profile = p);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = false; // role-aware admin entry added in home redesign
     return Scaffold(
       appBar: AppBar(
         title: const Text('Volunteer Activities'),
@@ -26,12 +46,15 @@ class ActivitiesListScreen extends StatelessWidget {
           onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         actions: [
-          IconButton(
-            tooltip: 'My Activities',
-            icon: const Icon(Icons.event_available),
-            onPressed: () => context.push('/my-activities'),
-          ),
-          if (FirebaseAuth.instance.currentUser != null || isAdmin)
+          // Personal view — registered users only (hidden from visitors).
+          if (FirebaseAuth.instance.currentUser != null)
+            IconButton(
+              tooltip: 'My Activities',
+              icon: const Icon(Icons.event_available),
+              onPressed: () => context.push('/my-activities'),
+            ),
+          // Admin/NGO only (UC-21/22) — was leaking to every signed-in user.
+          if (_isAdmin)
             IconButton(
               tooltip: 'Manage (admin)',
               icon: const Icon(Icons.admin_panel_settings_outlined),
@@ -46,7 +69,7 @@ class ActivitiesListScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return _ErrorState(message: '${snapshot.error}');
+            return const _ErrorState();
           }
           final activities = (snapshot.data ?? [])
               .where((a) => !a.isPast)
@@ -170,21 +193,24 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  final String message;
-  const _ErrorState({required this.message});
+  const _ErrorState();
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: AppSpacing.pagePadding,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            const Icon(Icons.cloud_off_outlined,
+                size: 56, color: AppColors.outline),
             const SizedBox(height: AppSpacing.stackMd),
-            Text('Could not load activities.\n$message',
+            Text("Couldn't load activities",
+                style: AppText.titleSm, textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.stackSm),
+            Text('Check your connection and try again.',
                 textAlign: TextAlign.center,
-                style: AppText.bodyBase.copyWith(color: AppColors.secondary)),
+                style: AppText.bodySm.copyWith(color: AppColors.outline)),
           ],
         ),
       ),

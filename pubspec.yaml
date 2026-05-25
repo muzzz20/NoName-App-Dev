@@ -54,6 +54,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  integration_test:
+    sdk: flutter
+
+  # Mocking image_picker in integration tests (inject a fake photo so the
+  # submit-report write path is driveable without a real camera/gallery).
+  image_picker_platform_interface: any
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -75,8 +82,9 @@ flutter:
   # Firebase config (Auth/Firestore/Storage) is compiled into
   # firebase_options.dart (committed) — the app boots on a fresh clone
   # with ZERO local config. No .env asset is required to run.
-  # Sprint 4 will re-add `.env` to assets when real payment gateway keys
-  # are wired; today PaymentService runs in simulation mode.
+  # Payments use Stripe Checkout (test mode) via the createCheckoutSession
+  # Cloud Function — the Stripe secret lives in Functions secrets, never
+  # in the client, so no payment key or .env asset ships with the app.
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

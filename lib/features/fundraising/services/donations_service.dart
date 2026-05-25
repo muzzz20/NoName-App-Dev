@@ -54,13 +54,22 @@ class DonationsService {
     });
   }
 
-  /// Stream the donation correlated to a Stripe Checkout session.
-  /// The receipt screen subscribes to this after the redirect-back so it
-  /// shows the donation as soon as the webhook writes it (usually < 2s).
-  /// Emits null until the donation lands.
-  Stream<Donation?> watchDonationBySession(String sessionId) {
+  /// Stream the donation correlated to a Stripe Checkout session, scoped to
+  /// the [donorId] who paid.
+  ///
+  /// The `donorId` filter is REQUIRED, not optional: the donations read rule
+  /// only lets a donor read their own docs, and Firestore rejects a query
+  /// wholesale (permission-denied) unless it is constrained to satisfy that
+  /// rule. Filtering by `stripeSessionId` alone was denied — leaving the
+  /// receipt stuck on "confirming". Two equality filters need no composite
+  /// index. Emits null until the webhook writes the donation (usually < 2s).
+  Stream<Donation?> watchDonationBySession({
+    required String sessionId,
+    required String donorId,
+  }) {
     return _donations
         .where('stripeSessionId', isEqualTo: sessionId)
+        .where('donorId', isEqualTo: donorId)
         .limit(1)
         .snapshots()
         .map((snap) =>

@@ -188,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: AppText.bodySm.copyWith(color: AppColors.outline),
                     ),
                     GestureDetector(
-                      onTap: () => context.go(AppRoutes.register),
+                      onTap: () => context.push(AppRoutes.register),
                       child: Text(
                         'Register',
                         style: AppText.bodySm.copyWith(

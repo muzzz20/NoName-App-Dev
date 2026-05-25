@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'core/firebase_emulators.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -12,6 +13,12 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Local development/testing against the Firebase Emulator Suite — never
+  // prod. Enable with: flutter run --dart-define=USE_EMULATOR=true
+  if (const bool.fromEnvironment('USE_EMULATOR')) {
+    await connectToFirebaseEmulators();
+  }
 
   // Storage is Firebase Cloud Storage (migrated off Supabase once the
   // project moved to Blaze). Uploads use the signed-in user's Firebase

@@ -87,4 +87,24 @@ class ReportsService {
   }) async {
     await _reports.doc(reportId).update({'status': status.storageKey});
   }
+
+  /// Owner edit (UC-08) — update a report's CONTENT fields only. Never touches
+  /// status / userId / createdAt (the firestore.rules owner branch
+  /// rejects changing those, and only allows it while status == 'pending').
+  Future<void> updateReport({
+    required String reportId,
+    required String photoUrl,
+    required GeoPoint location,
+    required CatCondition condition,
+    required String description,
+    String? locationLabel,
+  }) async {
+    await _reports.doc(reportId).update({
+      'photoUrl': photoUrl,
+      'location': location,
+      'condition': condition.storageKey,
+      'description': description,
+      'locationLabel': locationLabel,
+    });
+  }
 }

@@ -5,12 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
+import '../../../core/widgets/sign_in_prompt.dart';
 import '../models/activity.dart';
 import '../services/activities_service.dart';
 import '../services/signups_service.dart';
 import 'activity_format.dart';
 
-/// UC-17 View Activity Detail + Sign Up / Cancel.
+/// UC-18 View Activity Detail + Sign Up / Cancel (UC-19).
 class ActivityDetailScreen extends StatefulWidget {
   final String activityId;
   const ActivityDetailScreen({super.key, required this.activityId});
@@ -62,7 +63,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Activity'),
+        title: const Text('Activity Details'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
@@ -101,7 +102,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(activity.title, style: AppText.displayLg),
+          Text(activity.title, style: AppText.headlineMd),
           const SizedBox(height: AppSpacing.stackMd),
           _infoRow(Icons.calendar_today,
               formatActivityDateTime(activity.dateTime)),
@@ -131,6 +132,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   Widget _signupButton(Activity activity) {
     if (activity.status != ActivityStatus.upcoming || activity.isPast) {
       return _disabledButton('Activity closed');
+    }
+    // Visitors: keep the button visible but route to sign-in (action gated).
+    if (FirebaseAuth.instance.currentUser == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: () => showSignInPrompt(context, 'sign up for activities'),
+          icon: const Icon(Icons.check),
+          label: const Text('Sign Up'),
+        ),
+      );
     }
     return StreamBuilder<bool>(
       stream: _signups.watchIsSignedUp(

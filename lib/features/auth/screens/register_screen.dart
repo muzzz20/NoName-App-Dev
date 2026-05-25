@@ -54,7 +54,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName: _nameController.text,
       );
       if (!mounted) return;
-      // Router will redirect to /home once auth state fires.
+      // Registration signs the user in immediately, so go straight to the
+      // home feed. Explicit nav (mirrors login) — the redirect guard doesn't
+      // reliably fire for the imperatively pushed /register route.
+      context.go(AppRoutes.home);
     } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
@@ -238,7 +241,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: AppText.bodySm.copyWith(color: AppColors.outline),
                     ),
                     GestureDetector(
-                      onTap: () => context.go(AppRoutes.login),
+                      onTap: () => context.canPop()
+                          ? context.pop()
+                          : context.go(AppRoutes.login),
                       child: Text(
                         'Sign In',
                         style: AppText.bodySm.copyWith(

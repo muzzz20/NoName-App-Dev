@@ -54,6 +54,32 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
             FutureBuilder<DashboardStats>(
               future: _statsF,
               builder: (context, snap) {
+                if (snap.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.cloud_off_outlined,
+                            size: 56, color: AppColors.outline),
+                        const SizedBox(height: AppSpacing.stackMd),
+                        Text("Couldn't load impact stats",
+                            style: AppText.titleSm,
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: AppSpacing.stackSm),
+                        Text('Check your connection and try again.',
+                            style: AppText.bodySm
+                                .copyWith(color: AppColors.outline),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: AppSpacing.stackLg),
+                        FilledButton(
+                          onPressed: () => setState(
+                              () => _statsF = _dashboard.getStats()),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 if (!snap.hasData) {
                   return const Padding(
                     padding: EdgeInsets.all(AppSpacing.stackXl),

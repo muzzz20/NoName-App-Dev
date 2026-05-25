@@ -9,10 +9,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class DashboardStats {
   final int totalReports;
   final int activeCampaigns;
+  final int totalCampaigns;
   final int totalFundsRaisedSen;
   final int totalDonations;
   final int totalActivities;
   final int totalSignups;
+  final int totalUsers;
 
   const DashboardStats({
     required this.totalReports,
@@ -21,6 +23,8 @@ class DashboardStats {
     required this.totalDonations,
     required this.totalActivities,
     required this.totalSignups,
+    this.totalCampaigns = 0,
+    this.totalUsers = 0,
   });
 }
 
@@ -49,40 +53,77 @@ class DashboardService {
   /// - Donations     = sum(campaigns.donationCount)  (added by onDonationCreate)
   /// - Volunteers    = sum(activities.slots) − sum(activities.slotsRemaining)
   Future<DashboardStats> getStats() async {
+    final campaigns = _firestore.collection('campaigns');
+    final activities = _firestore.collection('activities');
+
+    // NOTE: each sum() is its OWN aggregate query. Combining two sum()s on
+    // different fields in a single .aggregate() call requires a composite
+    // index (currentAmount+donationCount / slots+slotsRemaining); splitting
+    // them keeps each on Firestore's automatic single-field index, so no
+    // composite index — and no deploy — is needed. All run in parallel.
     final reportsF = _firestore.collection('reports').count().get();
-    final activeCampaignsF = _firestore
-        .collection('campaigns')
-        .where('status', isEqualTo: 'active')
-        .count()
-        .get();
-    // Funds + donation count from public denormalized campaign fields.
-    final campaignsAggF = _firestore
-        .collection('campaigns')
-        .aggregate(sum('currentAmount'), sum('donationCount'))
-        .get();
-    final activitiesF = _firestore.collection('activities').count().get();
-    // Taken slots (= sign-ups) derived from public activities.
-    final activitiesAggF = _firestore
-        .collection('activities')
-        .aggregate(sum('slots'), sum('slotsRemaining'))
-        .get();
+    final activeCampaignsF =
+        campaigns.where('status', isEqualTo: 'active').count().get();
+    final fundsF = campaigns.aggregate(sum('currentAmount')).get();
+    final donationsF = campaigns.aggregate(sum('donationCount')).get();
+    final activitiesF = activities.count().get();
+    final slotsF = activities.aggregate(sum('slots')).get();
+    final slotsRemainingF = activities.aggregate(sum('slotsRemaining')).get();
 
-    final results =
-        await Future.wait([reportsF, activeCampaignsF, activitiesF]);
-    final campaignsAgg = await campaignsAggF;
-    final activitiesAgg = await activitiesAggF;
+    final reports = await reportsF;
+    final activeCampaigns = await activeCampaignsF;
+    final funds = await fundsF;
+    final donations = await donationsF;
+    final activitiesCount = await activitiesF;
+    final slotsAgg = await slotsF;
+    final slotsRemainingAgg = await slotsRemainingF;
 
-    final slots = (activitiesAgg.getSum('slots') ?? 0).toInt();
-    final slotsRemaining = (activitiesAgg.getSum('slotsRemaining') ?? 0).toInt();
+    final slots = (slotsAgg.getSum('slots') ?? 0).toInt();
+    final slotsRemaining =
+        (slotsRemainingAgg.getSum('slotsRemaining') ?? 0).toInt();
     final takenSlots = (slots - slotsRemaining).clamp(0, slots);
 
     return DashboardStats(
-      totalReports: (results[0]).count ?? 0,
-      activeCampaigns: (results[1]).count ?? 0,
-      totalActivities: (results[2]).count ?? 0,
-      totalFundsRaisedSen: (campaignsAgg.getSum('currentAmount') ?? 0).toInt(),
-      totalDonations: (campaignsAgg.getSum('donationCount') ?? 0).toInt(),
+      totalReports: reports.count ?? 0,
+      activeCampaigns: activeCampaigns.count ?? 0,
+      totalActivities: activitiesCount.count ?? 0,
+      totalFundsRaisedSen: (funds.getSum('currentAmount') ?? 0).toInt(),
+      totalDonations: (donations.getSum('donationCount') ?? 0).toInt(),
       totalSignups: takenSlots,
+    );
+  }
+
+  /// Admin/NGO dashboard totals — overall counts across the whole system,
+  /// including `totalCampaigns` (ALL statuses) and `totalUsers` (registered
+  /// accounts). The users count needs auth (`users` read = signed-in), so this
+  /// is dashboard-only and must NOT power the public Home/Public-Stats views —
+  /// use [getStats] there. Each query runs on Firestore's automatic
+  /// single-field index (no composite index, no deploy).
+  Future<DashboardStats> getDashboardStats() async {
+    final campaigns = _firestore.collection('campaigns');
+    final reportsF = _firestore.collection('reports').count().get();
+    final campaignsF = campaigns.count().get();
+    final fundsF = campaigns.aggregate(sum('currentAmount')).get();
+    final donationsF = campaigns.aggregate(sum('donationCount')).get();
+    final activitiesF = _firestore.collection('activities').count().get();
+    final usersF = _firestore.collection('users').count().get();
+
+    final reports = await reportsF;
+    final allCampaigns = await campaignsF;
+    final funds = await fundsF;
+    final donations = await donationsF;
+    final activities = await activitiesF;
+    final users = await usersF;
+
+    return DashboardStats(
+      totalReports: reports.count ?? 0,
+      activeCampaigns: 0, // not shown on the dashboard
+      totalCampaigns: allCampaigns.count ?? 0,
+      totalFundsRaisedSen: (funds.getSum('currentAmount') ?? 0).toInt(),
+      totalDonations: (donations.getSum('donationCount') ?? 0).toInt(),
+      totalActivities: activities.count ?? 0,
+      totalSignups: 0, // replaced by totalUsers on the dashboard
+      totalUsers: users.count ?? 0,
     );
   }
 
@@ -92,9 +133,11 @@ class DashboardService {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day)
         .subtract(const Duration(days: 29));
+    // Range on createdAt only (single-field index). Filtering status server-
+    // side too would need a (status, createdAt) composite index — instead we
+    // filter status client-side below; the 30-day window keeps the set small.
     final snap = await _firestore
         .collection('donations')
-        .where('status', isEqualTo: 'success')
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .get();
 
@@ -106,6 +149,7 @@ class DashboardService {
     }
     for (final doc in snap.docs) {
       final data = doc.data();
+      if (data['status'] != 'success') continue; // count successful only
       final ts = (data['createdAt'] as Timestamp?)?.toDate();
       final amount = (data['amount'] as num?)?.toInt() ?? 0;
       if (ts == null) continue;

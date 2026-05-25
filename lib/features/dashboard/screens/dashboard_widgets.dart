@@ -5,6 +5,34 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../services/dashboard_service.dart';
 
+/// A titled white card that wraps a dashboard section (sparkline, lists).
+class DashboardSection extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const DashboardSection({super.key, required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.stackLg),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppText.titleSm),
+          const SizedBox(height: AppSpacing.stackMd),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 /// A single KPI tile's data.
 class KpiItem {
   final String label;
@@ -26,7 +54,9 @@ class KpiGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: AppSpacing.stackMd,
       crossAxisSpacing: AppSpacing.stackMd,
-      childAspectRatio: 1.7,
+      // Slightly taller cells so the icon + value + label never overflow on
+      // narrow phones (labels are kept short enough to fit one line).
+      childAspectRatio: 1.5,
       children: items.map((i) => _KpiCard(item: i)).toList(),
     );
   }
@@ -49,7 +79,7 @@ class _KpiCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(item.icon, color: AppColors.primary, size: 22),
+          Icon(item.icon, color: AppColors.primary, size: 20),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

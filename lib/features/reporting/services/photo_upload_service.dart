@@ -39,7 +39,10 @@ class PhotoUploadService {
   ///
   /// Throws [PhotoUploadFailure] on any user-facing error
   /// (permission denied, network, oversized after compression, etc.).
-  Future<String> pickAndUpload({required ImageSource source}) async {
+  Future<String> pickAndUpload({
+    required ImageSource source,
+    String folder = _folder,
+  }) async {
     final XFile? picked = await _picker.pickImage(
       source: source,
       imageQuality: 85, // initial JPEG quality knob — fast path
@@ -53,7 +56,7 @@ class PhotoUploadService {
     final bytes = await picked.readAsBytes();
     final compressed = await _ensureUnderLimit(bytes);
 
-    return _uploadBytes(compressed, originalPath: picked.name);
+    return _uploadBytes(compressed, originalPath: picked.name, folder: folder);
   }
 
   /// Compress further on a background isolate if the picker output is still
@@ -85,10 +88,11 @@ class PhotoUploadService {
   Future<String> _uploadBytes(
     Uint8List bytes, {
     required String originalPath,
+    String folder = _folder,
   }) async {
     final id = const Uuid().v4();
     final ext = _ext(originalPath);
-    final objectPath = '$_folder/$id$ext';
+    final objectPath = '$folder/$id$ext';
 
     try {
       final ref = _storage.ref().child(objectPath);

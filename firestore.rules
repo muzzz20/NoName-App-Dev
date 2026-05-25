@@ -56,7 +56,18 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == 'pending';
-      allow update: if isAdminOrNgo();
+      // Admin/NGO may update anything (incl. status). OR the OWNER may edit
+      // their OWN report's content while it is still pending — but never the
+      // status, owner, or creation time (strict lock).
+      allow update: if isAdminOrNgo()
+                    || (
+                      isSignedIn()
+                      && resource.data.userId == request.auth.uid
+                      && resource.data.status == 'pending'
+                      && request.resource.data.status == 'pending'
+                      && request.resource.data.userId == resource.data.userId
+                      && request.resource.data.createdAt == resource.data.createdAt
+                    );
       allow delete: if isAdminOrNgo();
     }
 
@@ -166,7 +177,14 @@ service cloud.firestore {
     // - Update: disallowed.
     // - Delete: the volunteer may cancel their own sign-up.
     match /signups/{id} {
+      // `resource == null` lets a signed-in user read a NON-existent signup
+      // doc — required by the sign-up transaction + watchIsSignedUp stream,
+      // which check existence by deterministic id ({activityId}_{uid}). Without
+      // it, get() on a missing doc evaluates resource.data on null → denied,
+      // so sign-up failed with "Something went wrong". Existing signups stay
+      // restricted to the owner / admin / ngo.
       allow read: if isSignedIn() && (
+                    resource == null ||
                     resource.data.volunteerId == request.auth.uid ||
                     isAdminOrNgo()
                   );

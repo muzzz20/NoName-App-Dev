@@ -128,10 +128,20 @@ class CampaignCard extends StatelessWidget {
                                 .copyWith(color: AppColors.secondary)),
                       ],
                     ),
-                    if (daysLeft != null && daysLeft >= 0) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        // Completed campaigns show "Goal reached" instead of a
+                        // stale countdown (an ended/funded campaign keeping a
+                        // future endsAt would otherwise still read "X days left").
+                        if (isCompleted) ...[
+                          const Icon(Icons.check_circle,
+                              size: 13, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text('Goal reached',
+                              style: AppText.labelCaps
+                                  .copyWith(color: AppColors.primary)),
+                        ] else if (daysLeft != null && daysLeft >= 0) ...[
                           const Icon(Icons.schedule,
                               size: 13, color: AppColors.outline),
                           const SizedBox(width: 4),
@@ -142,8 +152,19 @@ class CampaignCard extends StatelessWidget {
                               style: AppText.labelCaps
                                   .copyWith(color: AppColors.outline)),
                         ],
-                      ),
-                    ],
+                        if (c.donorCount > 0) ...[
+                          const Spacer(),
+                          const Icon(Icons.people_outline,
+                              size: 13, color: AppColors.outline),
+                          const SizedBox(width: 4),
+                          Text(
+                              '${c.donorCount} '
+                              '${c.donorCount == 1 ? 'donor' : 'donors'}',
+                              style: AppText.labelCaps
+                                  .copyWith(color: AppColors.outline)),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
