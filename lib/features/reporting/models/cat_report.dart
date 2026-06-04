@@ -57,6 +57,13 @@ enum ReportStatus {
 class CatReport {
   final String id;
   final String userId;
+
+  /// Denormalized display name of the reporter, copied from the user's
+  /// profile at submit time. Lets the public Report Detail (UC-07) show
+  /// "Reported by …" without reading the private `users/{uid}` doc —
+  /// visitors can't read that collection. Null for legacy reports
+  /// created before this field existed (resolved via fallback / backfill).
+  final String? reporterName;
   final String photoUrl;
   final GeoPoint location;
   final String? locationLabel; // e.g. "Kolej Tun Razak, Block L50"
@@ -75,10 +82,12 @@ class CatReport {
     required this.status,
     required this.createdAt,
     this.locationLabel,
+    this.reporterName,
   });
 
   Map<String, dynamic> toFirestore() => {
         'userId': userId,
+        if (reporterName != null) 'reporterName': reporterName,
         'photoUrl': photoUrl,
         'location': location,
         if (locationLabel != null) 'locationLabel': locationLabel,
@@ -98,6 +107,7 @@ class CatReport {
     return CatReport(
       id: doc.id,
       userId: data['userId'] as String? ?? '',
+      reporterName: data['reporterName'] as String?,
       photoUrl: data['photoUrl'] as String? ?? '',
       location: data['location'] as GeoPoint? ?? const GeoPoint(0, 0),
       locationLabel: data['locationLabel'] as String?,
