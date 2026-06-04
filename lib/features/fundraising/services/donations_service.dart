@@ -1,93 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/donation.dart';
-import 'payment_service.dart';
 
-/// Firestore data layer for `donations` collection. NAD-26.
+/// Firestore read layer for `donations`. NAD-26.
 ///
-/// **Flow** (per NAD-26 AC):
-///   1. UI calls [donate]
-///   2. We call `PaymentService.processPayment` (NAD-21 simulation)
-///   3. We write `donations/{id}` doc with the synchronous outcome —
-///      `status: 'success'` (with `transactionId`) or `'failed'` (with
-///      `failureCode`)
-///   4. Cloud Function `onDonationCreate` (functions/index.js) reads
-///      the new doc and, if `status='success'`, increments
-///      `campaigns/{campaignId}.currentAmount` atomically. Failed
-///      donations are recorded but do not contribute to the total.
-///
-/// **Why client-side write, not pending-then-update:**
-///   - `firestore.rules` forbid client updates on `donations`
-///     (anti-tampering — only the Cloud Function service account can
-///     change a donation post-create).
-///   - The simulation gateway returns the outcome synchronously, so the
-///     client already knows the final status at write time.
-///   - One Firestore write per donation instead of two.
-///   - Sprint 4 real-gateway swap: PaymentService still returns
-///     synchronously for one-shot card payments. For redirect-based
-///     flows (FPX, Boost) we'll revisit — likely adding a webhook
-///     Cloud Function that creates the donation server-side after the
-///     redirect completes.
+/// **Donations are written server-side only** by the `stripeWebhook`
+/// Cloud Function after Stripe confirms a payment (NAD-21). The client
+/// never creates a donation doc — `firestore.rules` deny client writes
+/// to this collection. This service therefore exposes reads only, plus
+/// a session-correlation stream for the receipt screen.
 class DonationsService {
-  DonationsService({
-    FirebaseFirestore? firestore,
-    PaymentService? paymentService,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _paymentService = paymentService ?? PaymentService();
+  DonationsService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final PaymentService _paymentService;
 
   CollectionReference<Map<String, dynamic>> get _donations =>
       _firestore.collection('donations');
 
-  /// Orchestrate one donation: payment then persistence.
-  ///
-  /// Returns the persisted [Donation]. The caller (UI) decides what to
-  /// do based on `result.status` — show receipt for success, show
-  /// retry CTA for failure.
-  ///
-  /// Throws [DonationFailure] on caller validation errors (amount <= 0)
-  /// — same pattern as [PaymentFailure]. Gateway-side declines are
-  /// returned as `Donation(status: failed)`, NOT thrown.
-  Future<Donation> donate({
-    required String donorId,
-    required String campaignId,
-    required int amountSen,
-    String? donorName,
-  }) async {
-    if (amountSen <= 0) {
-      throw const DonationFailure(
-        'Donation amount must be greater than zero.',
-      );
-    }
-
-    final result = await _paymentService.processPayment(
-      amountSen: amountSen,
-      donorId: donorId,
-      campaignId: campaignId,
-    );
-
-    final docRef = _donations.doc();
-    final donation = Donation(
-      id: docRef.id,
-      donorId: donorId,
-      campaignId: campaignId,
-      amountSen: amountSen,
-      transactionId: result.transactionId,
-      status: result.isSuccess
-          ? DonationStatus.success
-          : DonationStatus.failed,
-      failureCode: result.failureCode?.storageKey,
-      createdAt: DateTime.now().toUtc(),
-      donorName: donorName,
-    );
-    await docRef.set(donation.toFirestore());
-    return donation;
-  }
-
   /// Stream of donations by a single donor, newest first.
-  /// Powers "My Donations" history screen.
+  /// Powers "My Donations" history.
   Stream<List<Donation>> watchDonationsByDonor({
     required String donorId,
     int limit = 50,
@@ -100,10 +32,9 @@ class DonationsService {
         .map((snap) => snap.docs.map(Donation.fromFirestore).toList());
   }
 
-  /// Stream of all donations (any status) for a single campaign,
-  /// newest first. Status filtering is done client-side at the limit
-  /// of 100 — successful-only is used by the transparency report
-  /// (NAD-27), all-status is used by admin reconciliation views.
+  /// Stream of donations (optionally success-only) for a campaign,
+  /// newest first. Feeds the transparency report (NAD-27) and admin
+  /// reconciliation. Status filter applied client-side at the limit.
   Stream<List<Donation>> watchDonationsForCampaign({
     required String campaignId,
     int limit = 100,
@@ -123,22 +54,32 @@ class DonationsService {
     });
   }
 
-  /// One-shot fetch of a single donation. Powers the receipt download
-  /// flow and admin-side inspection.
+  /// Stream the donation correlated to a Stripe Checkout session, scoped to
+  /// the [donorId] who paid.
+  ///
+  /// The `donorId` filter is REQUIRED, not optional: the donations read rule
+  /// only lets a donor read their own docs, and Firestore rejects a query
+  /// wholesale (permission-denied) unless it is constrained to satisfy that
+  /// rule. Filtering by `stripeSessionId` alone was denied — leaving the
+  /// receipt stuck on "confirming". Two equality filters need no composite
+  /// index. Emits null until the webhook writes the donation (usually < 2s).
+  Stream<Donation?> watchDonationBySession({
+    required String sessionId,
+    required String donorId,
+  }) {
+    return _donations
+        .where('stripeSessionId', isEqualTo: sessionId)
+        .where('donorId', isEqualTo: donorId)
+        .limit(1)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.isEmpty ? null : Donation.fromFirestore(snap.docs.first));
+  }
+
+  /// One-shot fetch of a single donation by id.
   Future<Donation?> getDonation(String id) async {
     final snap = await _donations.doc(id).get();
     if (!snap.exists) return null;
     return Donation.fromFirestore(snap);
   }
-}
-
-/// Friendly caller-side validation failure (amount ≤ 0). Distinct from
-/// a gateway-side decline which is returned as `Donation(status:
-/// failed)` rather than thrown.
-class DonationFailure implements Exception {
-  final String message;
-  const DonationFailure(this.message);
-
-  @override
-  String toString() => message;
 }

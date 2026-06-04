@@ -1,8 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'core/env.dart';
+import 'core/firebase_emulators.dart';
+import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -10,32 +10,22 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // .env loaded first — Supabase needs its URL + key from here.
-  await Env.load();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  await Future.wait<void>([
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
-    Supabase.initialize(
-      url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
-    ),
-  ]);
-
-  // Sign in to Supabase anonymously so the app has a JWT with the
-  // `authenticated` role — required by the cat-photos bucket RLS policy
-  // (authenticated INSERT). This is independent from Firebase Auth which
-  // we use for user identity. Sprint 2 (AI-17) replaces this with a
-  // proper Firebase ID token ↔ Supabase JWT exchange so the Supabase
-  // user maps 1:1 to the real Firebase uid.
-  final supabase = Supabase.instance.client;
-  if (supabase.auth.currentUser == null) {
-    try {
-      await supabase.auth.signInAnonymously();
-    } catch (_) {
-      // Non-fatal at startup — uploads will surface the failure with
-      // a friendly message via PhotoUploadFailure.
-    }
+  // Local development/testing against the Firebase Emulator Suite — never
+  // prod. Enable with: flutter run --dart-define=USE_EMULATOR=true
+  if (const bool.fromEnvironment('USE_EMULATOR')) {
+    await connectToFirebaseEmulators();
   }
+
+  // Storage is Firebase Cloud Storage (migrated off Supabase once the
+  // project moved to Blaze). Uploads use the signed-in user's Firebase
+  // token automatically — no separate anonymous sign-in needed.
+
+  // FCM push (NAD-39). Fully defensive — never blocks startup.
+  await NotificationService.init();
 
   runApp(const StrayfriendsApp());
 }
@@ -49,6 +39,13 @@ class StrayfriendsApp extends StatefulWidget {
 
 class _StrayfriendsAppState extends State<StrayfriendsApp> {
   late final _router = buildAppRouter();
+
+  @override
+  void initState() {
+    super.initState();
+    // Notification tap → deep link into the app (e.g. /activity/:id).
+    NotificationService.onNavigate = (route) => _router.go(route);
+  }
 
   @override
   void dispose() {

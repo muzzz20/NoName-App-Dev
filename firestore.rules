@@ -56,7 +56,18 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == 'pending';
-      allow update: if isAdminOrNgo();
+      // Admin/NGO may update anything (incl. status). OR the OWNER may edit
+      // their OWN report's content while it is still pending — but never the
+      // status, owner, or creation time (strict lock).
+      allow update: if isAdminOrNgo()
+                    || (
+                      isSignedIn()
+                      && resource.data.userId == request.auth.uid
+                      && resource.data.status == 'pending'
+                      && request.resource.data.status == 'pending'
+                      && request.resource.data.userId == resource.data.userId
+                      && request.resource.data.createdAt == resource.data.createdAt
+                    );
       allow delete: if isAdminOrNgo();
     }
 
@@ -80,31 +91,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // === donations/{id} ===  NAD-22, NAD-26
+    // === donations/{id} ===  NAD-21, NAD-26
     // Donor payment records. Schema: donorId, campaignId, amount,
-    // transactionId?, status ('success'|'failed'), failureCode?,
-    // createdAt, donorName?.
+    // transactionId, stripeSessionId, status ('success'), donorName,
+    // createdAt.
     // - Read: donor reads own; admin/ngo reads all (transparency)
-    // - Create: signed-in donor only; donorId must equal own uid;
-    //           status must be 'success' or 'failed' (final outcome
-    //           known client-side because PaymentService returns it
-    //           synchronously — see NAD-26); amount must be positive;
-    //           campaignId must reference an existing campaign.
-    // - Update: disallowed from client — anti-tampering. The Cloud
-    //           Function onDonationCreate updates campaigns.currentAmount
-    //           via service account (which bypasses these rules).
-    // - Delete: disallowed
+    // - Create: DISALLOWED from client. Donations are written ONLY by
+    //           the `stripeWebhook` Cloud Function (admin service account,
+    //           bypasses rules) after Stripe confirms a real payment.
+    //           This makes a fabricated donation impossible from the app.
+    // - Update / Delete: disallowed.
     match /donations/{id} {
       allow read: if isSignedIn() && (
                     resource.data.donorId == request.auth.uid ||
                     isAdminOrNgo()
                   );
-      allow create: if isSignedIn()
-                    && request.resource.data.donorId == request.auth.uid
-                    && request.resource.data.status in ['success', 'failed']
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount > 0
-                    && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
+      allow create: if false;
       allow update: if false;
       allow delete: if false;
     }
@@ -129,6 +131,69 @@ service cloud.firestore {
                     && exists(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId));
       allow update: if isAdminOrNgo();
       allow delete: if false;
+    }
+
+    // === activities/{id} ===  NAD-42 (Sprint 3)
+    // Volunteer activities. Schema: title, description, location,
+    // dateTime, slots, slotsRemaining, imageUrl?, createdBy, status,
+    // createdAt.
+    // - Read: public — anyone can browse upcoming activities (UC-16)
+    // - Create: admin/ngo only; createdBy must equal own uid;
+    //           slotsRemaining must start equal to slots; status upcoming
+    // - Update: admin/ngo (any field) OR any signed-in user changing
+    //           ONLY slotsRemaining (the sign-up / cancel transaction in
+    //           SignupsService decrements/restores it atomically)
+    // - Delete: disallowed from client (use status='cancelled')
+    match /activities/{id} {
+      allow read: if true;
+      allow create: if isAdminOrNgo()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.slots is number
+                    && request.resource.data.slotsRemaining == request.resource.data.slots
+                    && request.resource.data.status == 'upcoming';
+      allow update: if isAdminOrNgo()
+                    || (isSignedIn()
+                        && request.resource.data.diff(resource.data)
+                            .affectedKeys().hasOnly(['slotsRemaining'])
+                        // Only ±1: a sign-up decrements, a cancel
+                        // increments. Blocks a crafted client from
+                        // setting an arbitrary slot count (grief).
+                        && (request.resource.data.slotsRemaining ==
+                                resource.data.slotsRemaining - 1
+                            || request.resource.data.slotsRemaining ==
+                                resource.data.slotsRemaining + 1));
+      allow delete: if false;
+    }
+
+    // === signups/{id} ===  NAD-43 (Sprint 3)
+    // Volunteer ↔ activity join. Doc id is {activityId}_{volunteerId}
+    // (deterministic — prevents duplicates). Schema: volunteerId,
+    // activityId, signedAt, volunteerName?.
+    // - Read: the volunteer reads own; admin/ngo reads all (to see the
+    //         volunteer roster for an activity — UC-19)
+    // - Create: signed-in user, volunteerId must equal own uid, the
+    //           referenced activity must exist. The slot decrement is done
+    //           in the same client transaction (see SignupsService).
+    // - Update: disallowed.
+    // - Delete: the volunteer may cancel their own sign-up.
+    match /signups/{id} {
+      // `resource == null` lets a signed-in user read a NON-existent signup
+      // doc — required by the sign-up transaction + watchIsSignedUp stream,
+      // which check existence by deterministic id ({activityId}_{uid}). Without
+      // it, get() on a missing doc evaluates resource.data on null → denied,
+      // so sign-up failed with "Something went wrong". Existing signups stay
+      // restricted to the owner / admin / ngo.
+      allow read: if isSignedIn() && (
+                    resource == null ||
+                    resource.data.volunteerId == request.auth.uid ||
+                    isAdminOrNgo()
+                  );
+      allow create: if isSignedIn()
+                    && request.resource.data.volunteerId == request.auth.uid
+                    && exists(/databases/$(database)/documents/activities/$(request.resource.data.activityId));
+      allow update: if false;
+      allow delete: if isSignedIn()
+                    && resource.data.volunteerId == request.auth.uid;
     }
 
     // === Default deny ===
