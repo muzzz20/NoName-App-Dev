@@ -102,6 +102,22 @@ class AuthService {
     return UserProfile.fromFirestore(snap);
   }
 
+  /// Update the signed-in user's own profile (UC-04). Writes ONLY
+  /// `fullName`/`photoUrl` — never `role` — so the users update rule
+  /// (self + role unchanged) is satisfied. Also mirrors to the Auth profile.
+  Future<void> updateProfile({String? fullName, String? photoUrl}) async {
+    final user = currentUser;
+    if (user == null) throw const AuthFailure('You must be signed in.');
+    final data = <String, dynamic>{};
+    if (fullName != null) data['fullName'] = fullName.trim();
+    if (photoUrl != null) data['photoUrl'] = photoUrl;
+    if (data.isNotEmpty) {
+      await _users.doc(user.uid).set(data, SetOptions(merge: true));
+    }
+    if (fullName != null) await user.updateDisplayName(fullName.trim());
+    if (photoUrl != null) await user.updatePhotoURL(photoUrl);
+  }
+
   /// Send password reset email (used by Login "Forgot Password" link).
   Future<void> sendPasswordReset({required String email}) async {
     try {

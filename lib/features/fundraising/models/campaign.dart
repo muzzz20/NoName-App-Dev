@@ -42,6 +42,13 @@ class Campaign {
   final String description;
   final int goalAmountSen;
   final int currentAmountSen;
+
+  /// Unique donor count, denormalized onto the campaign by the
+  /// `onDonationCreate` Cloud Function. Lets the public Campaign Detail
+  /// (UC-11) show donor count without reading the private `donations`
+  /// collection (visitors + regular users can't read others' donations).
+  /// 0 for campaigns created before this field / before the backfill.
+  final int donorCount;
   final String? imageUrl;
   final CampaignStatus status;
   final String createdBy;
@@ -57,6 +64,7 @@ class Campaign {
     required this.status,
     required this.createdBy,
     required this.createdAt,
+    this.donorCount = 0,
     this.imageUrl,
     this.endsAt,
   });
@@ -95,6 +103,7 @@ class Campaign {
       description: data['description'] as String? ?? '',
       goalAmountSen: (data['goalAmount'] as num?)?.toInt() ?? 0,
       currentAmountSen: (data['currentAmount'] as num?)?.toInt() ?? 0,
+      donorCount: (data['donorCount'] as num?)?.toInt() ?? 0,
       imageUrl: data['imageUrl'] as String?,
       status: CampaignStatus.tryParse(data['status'] as String?),
       createdBy: data['createdBy'] as String? ?? '',
