@@ -37,29 +37,20 @@ dependencies:
   firebase_core: ^4.8.0
   firebase_auth: ^6.5.0
   cloud_firestore: ^6.4.0
+  supabase_flutter: ^2.12.4
   google_fonts: ^8.1.0
   go_router: ^17.2.3
+  flutter_dotenv: ^6.0.1
   geolocator: ^14.0.2
   image_picker: ^1.2.2
   image: ^4.8.0
   uuid: ^4.5.3
   flutter_map: ^8.3.0
   latlong2: ^0.9.1
-  firebase_storage: ^13.4.1
-  cloud_functions: ^6.3.1
-  url_launcher: ^6.3.2
-  firebase_messaging: ^16.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  integration_test:
-    sdk: flutter
-
-  # Mocking image_picker in integration tests (inject a fake photo so the
-  # submit-report write path is driveable without a real camera/gallery).
-  image_picker_platform_interface: any
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -79,12 +70,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Firebase config (Auth/Firestore/Storage) is compiled into
-  # firebase_options.dart (committed) — the app boots on a fresh clone
-  # with ZERO local config. No .env asset is required to run.
-  # Payments use Stripe Checkout (test mode) via the createCheckoutSession
-  # Cloud Function — the Stripe secret lives in Functions secrets, never
-  # in the client, so no payment key or .env asset ships with the app.
+  assets:
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

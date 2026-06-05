@@ -47,38 +47,6 @@
         { "fieldPath": "campaignId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "activities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dateTime", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "activities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "createdBy", "order": "ASCENDING" },
-        { "fieldPath": "dateTime", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "signups",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "volunteerId", "order": "ASCENDING" },
-        { "fieldPath": "signedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "signups",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "activityId", "order": "ASCENDING" },
-        { "fieldPath": "signedAt", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

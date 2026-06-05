@@ -49,23 +49,13 @@ class TransparencyService {
       throw const TransparencyFailure('Campaign not found.');
     }
 
-    // Donations are private — only the donor themselves or an admin/NGO may
-    // read them (firestore.rules). Visitors + regular users get a
-    // permission error here, so the read is best-effort: on failure we fall
-    // back to the public denormalized donorCount and an empty supporters
-    // list. Admin/NGO still get the full list (for "recent supporters").
-    List<Donation> donations = const [];
-    try {
-      donations = await _donations
-          .watchDonationsForCampaign(
-            campaignId: campaignId,
-            limit: donationLimit,
-            successOnly: true,
-          )
-          .first;
-    } catch (_) {
-      donations = const [];
-    }
+    final donations = await _donations
+        .watchDonationsForCampaign(
+          campaignId: campaignId,
+          limit: donationLimit,
+          successOnly: true,
+        )
+        .first;
 
     final allocations = await _allocations
         .watchAllocationsForCampaign(
@@ -74,20 +64,13 @@ class TransparencyService {
         )
         .first;
 
-    // Prefer the public, Cloud-Function-maintained donorCount; fall back to
-    // counting the (admin-readable) donations list for campaigns created
-    // before the field existed / before the backfill ran.
-    final uniqueDonorsFromList =
-        donations.map((d) => d.donorId).toSet().length;
-    final donorCount =
-        campaign.donorCount > 0 ? campaign.donorCount : uniqueDonorsFromList;
-
+    final uniqueDonors = donations.map((d) => d.donorId).toSet();
     final totalAllocatedSen =
         allocations.fold<int>(0, (sum, a) => sum + a.amountSen);
 
     return TransparencyReport(
       campaign: campaign,
-      donorCount: donorCount,
+      donorCount: uniqueDonors.length,
       totalAllocatedSen: totalAllocatedSen,
       allocations: allocations,
       recentSuccessfulDonations: donations.take(10).toList(),

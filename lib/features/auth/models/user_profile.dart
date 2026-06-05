@@ -9,7 +9,6 @@ class UserProfile {
   final String email;
   final String fullName;
   final String role; // 'user' | 'admin' | 'ngo' — see NAD-22 for admin/ngo
-  final String? photoUrl; // avatar (UC-04); null = show initials
   final DateTime createdAt;
 
   const UserProfile({
@@ -18,14 +17,12 @@ class UserProfile {
     required this.fullName,
     required this.role,
     required this.createdAt,
-    this.photoUrl,
   });
 
   Map<String, dynamic> toFirestore() => {
         'email': email,
         'fullName': fullName,
         'role': role,
-        if (photoUrl != null) 'photoUrl': photoUrl,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 
@@ -39,7 +36,6 @@ class UserProfile {
       email: data['email'] as String? ?? '',
       fullName: data['fullName'] as String? ?? '',
       role: data['role'] as String? ?? 'user',
-      photoUrl: data['photoUrl'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
