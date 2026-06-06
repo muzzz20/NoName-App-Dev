@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
+import '../../reporting/services/photo_upload_service.dart';
 import '../services/campaigns_service.dart';
 import '../services/allocations_service.dart';
 
@@ -20,9 +23,12 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
   final _descriptionController = TextEditingController();
   final _goalController = TextEditingController();
   final _daysController = TextEditingController();
-  final _imageUrlController = TextEditingController(
-    text: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=800',
-  );
+
+  // Cover image is uploaded (like Submit Report), not pasted as a URL.
+  final _photoService = PhotoUploadService();
+  String? _imageUrl;
+  bool _photoUploading = false;
+  String? _photoError;
 
   final List<Map<String, TextEditingController>> _allocations = [];
   bool _isSaving = false;
@@ -30,7 +36,59 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
   final _campaignsService = CampaignsService();
   final _allocationsService = AllocationsService();
 
+  Future<void> _pickCover(ImageSource source) async {
+    setState(() {
+      _photoUploading = true;
+      _photoError = null;
+    });
+    try {
+      final url = await _photoService.pickAndUpload(
+          source: source, folder: 'campaign-photos');
+      if (mounted) setState(() => _imageUrl = url);
+    } on PhotoUploadFailure catch (e) {
+      if (mounted) setState(() => _photoError = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _photoError = 'Could not upload image: $e');
+    } finally {
+      if (mounted) setState(() => _photoUploading = false);
+    }
+  }
+
+  void _showCoverSourceSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickCover(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickCover(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Cap on transparency line items — keeps the donor-facing breakdown
+  /// readable and the form sane.
+  static const int _maxAllocations = 8;
+
   void _addAllocation() {
+    if (_allocations.length >= _maxAllocations) return;
     setState(() {
       _allocations.add({
         'label': TextEditingController(),
@@ -53,7 +111,6 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
     _descriptionController.dispose();
     _goalController.dispose();
     _daysController.dispose();
-    _imageUrlController.dispose();
     for (var controllers in _allocations) {
       controllers['label']!.dispose();
       controllers['amount']!.dispose();
@@ -63,7 +120,17 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
+    if (_imageUrl == null || _imageUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add a cover photo.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     if (_allocations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -99,8 +166,9 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
     
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final createdBy = user?.uid ?? 'admin_user_123';
-      
+      if (user == null) throw const CampaignFailure('You must be signed in.');
+      final createdBy = user.uid;
+
       final days = int.parse(_daysController.text);
       
       final campaign = await _campaignsService.createCampaign(
@@ -108,7 +176,7 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
         title: _titleController.text,
         description: _descriptionController.text,
         goalAmountSen: (goalAmount * 100).toInt(),
-        imageUrl: _imageUrlController.text.trim(),
+        imageUrl: _imageUrl!,
         endsAt: DateTime.now().add(Duration(days: days)),
       );
       
@@ -127,17 +195,19 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
       
       if (!mounted) return;
       setState(() => _isSaving = false);
-      
-      Navigator.pop(context);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Campaign created successfully!')),
       );
+      context.canPop() ? context.pop() : context.go('/campaigns');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error saving campaign: $e'),
+          content: Text(e is CampaignFailure
+              ? e.message
+              : "Couldn't save the campaign. Please try again."),
           backgroundColor: AppColors.error,
         ),
       );
@@ -151,7 +221,8 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
         title: const Text('Create Campaign'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/campaigns'),
         ),
         actions: [
           TextButton(
@@ -169,45 +240,77 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Cover Image URL and Live Preview
-                    TextFormField(
-                      controller: _imageUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'Cover Image URL',
-                        prefixIcon: Icon(Icons.image),
-                      ),
-                      onChanged: (val) {
-                        setState(() {});
-                      },
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                    ),
-                    const SizedBox(height: AppSpacing.stackMd),
-                    
-                    Container(
-                      height: 180,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: AppColors.cardBorder),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        child: Image.network(
-                          _imageUrlController.text,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.broken_image, size: 40, color: AppColors.outline),
-                              const SizedBox(height: AppSpacing.stackSm),
-                              Text('No image preview available', style: AppText.bodySm.copyWith(color: AppColors.outline)),
-                            ],
-                          ),
+                    // Cover image — uploaded like a report photo.
+                    Text('Cover Photo', style: AppText.titleSm),
+                    const SizedBox(height: AppSpacing.stackSm),
+                    GestureDetector(
+                      onTap: _photoUploading ? null : _showCoverSourceSheet,
+                      child: Container(
+                        height: 180,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          border: Border.all(color: AppColors.cardBorder),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          child: _photoUploading
+                              ? const Center(child: CircularProgressIndicator())
+                              : (_imageUrl != null && _imageUrl!.isNotEmpty)
+                                  ? Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Image.network(
+                                          _imageUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => const Center(
+                                            child: Icon(Icons.broken_image,
+                                                size: 40,
+                                                color: AppColors.outline),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          right: AppSpacing.stackSm,
+                                          bottom: AppSpacing.stackSm,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: AppSpacing.stackSm,
+                                                vertical: 4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.black54,
+                                              borderRadius: AppRadius.pillRadius,
+                                            ),
+                                            child: Text('Change photo',
+                                                style: AppText.labelCaps
+                                                    .copyWith(
+                                                        color: Colors.white)),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.add_a_photo_outlined,
+                                            size: 40, color: AppColors.primary),
+                                        const SizedBox(
+                                            height: AppSpacing.stackSm),
+                                        Text('Tap to add a cover photo',
+                                            style: AppText.bodySm.copyWith(
+                                                color: AppColors.outline)),
+                                      ],
+                                    ),
                         ),
                       ),
                     ),
-                    
+                    if (_photoError != null) ...[
+                      const SizedBox(height: AppSpacing.stackSm),
+                      Text(_photoError!,
+                          style: AppText.bodySm
+                              .copyWith(color: AppColors.error)),
+                    ],
+
                     const SizedBox(height: AppSpacing.stackLg),
                     Text('Basic Details', style: AppText.titleSm),
                     const SizedBox(height: AppSpacing.stackMd),
@@ -264,11 +367,24 @@ class _AdminManageCampaignScreenState extends State<AdminManageCampaignScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Allocations (Where money goes)', style: AppText.titleSm),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle, color: AppColors.primary),
-                          onPressed: _addAllocation,
+                        Expanded(
+                          child: Text('Allocations (Where money goes)',
+                              style: AppText.titleSm),
                         ),
+                        if (_allocations.length < _maxAllocations)
+                          IconButton(
+                            icon: const Icon(Icons.add_circle,
+                                color: AppColors.primary),
+                            onPressed: _addAllocation,
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                right: AppSpacing.stackSm),
+                            child: Text('Max $_maxAllocations',
+                                style: AppText.bodySm
+                                    .copyWith(color: AppColors.outline)),
+                          ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.stackSm),
