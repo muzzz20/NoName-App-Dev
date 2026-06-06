@@ -1,20 +1,23 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
-import '../../auth/models/user_profile.dart';
 import '../../auth/services/auth_service.dart';
 import '../models/cat_report.dart';
 import '../services/reports_service.dart';
 import '../widgets/condition_badge.dart';
 import '../widgets/static_map.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/status_timeline.dart';
 
 /// Report Detail (NAD-13) — UC-07. Shows the full report with photo hero,
-/// status, condition, description, location (lat/lng + label), reporter,
-/// and timestamp. Map preview is a static placeholder; live Google Map
-/// renderer lands in Sprint 3 via google_maps_flutter.
+/// status (badge + lifecycle timeline), condition, description, an
+/// OpenStreetMap location preview (tap → open in the device's maps app),
+/// reporter, and timestamp.
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
   const ReportDetailScreen({super.key, required this.reportId});
@@ -27,15 +30,64 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final _reportsService = ReportsService();
   final _authService = AuthService();
 
-  late final Future<_DetailPayload> _payload = _load();
+  late Future<_DetailPayload> _payload;
+  String? _role;
+  bool get _isAdmin => _role == 'admin' || _role == 'ngo';
+
+  @override
+  void initState() {
+    super.initState();
+    _payload = _load();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    if (FirebaseAuth.instance.currentUser == null) return;
+    try {
+      final p = await _authService.loadProfile();
+      if (mounted) setState(() => _role = p?.role);
+    } catch (_) {/* stays null → no admin control shown */}
+  }
+
+  // UC-09: admin/NGO moves the report through its lifecycle. Rule-backed —
+  // firestore.rules `reports` update = isAdminOrNgo().
+  Future<void> _updateStatus(ReportStatus status) async {
+    try {
+      await _reportsService.updateStatus(
+          reportId: widget.reportId, status: status);
+      if (!mounted) return;
+      setState(() => _payload = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Status updated to ${status.label}.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Couldn't update status. Please try again."),
+        backgroundColor: AppColors.error,
+      ));
+    }
+  }
 
   Future<_DetailPayload> _load() async {
     final report = await _reportsService.getReport(widget.reportId);
     if (report == null) {
       throw StateError('Report ${widget.reportId} not found');
     }
-    final reporter = await _authService.loadProfile(uid: report.userId);
-    return _DetailPayload(report: report, reporter: reporter);
+    // Prefer the denormalized reporter name (readable by everyone incl.
+    // visitors). Legacy reports lack it: a signed-in user can still resolve
+    // it from the auth-gated users doc; visitors fall back to a generic
+    // label since they cannot read the users collection.
+    var reporterName = report.reporterName;
+    if ((reporterName == null || reporterName.isEmpty) &&
+        FirebaseAuth.instance.currentUser != null) {
+      try {
+        reporterName =
+            (await _authService.loadProfile(uid: report.userId))?.fullName;
+      } catch (_) {
+        // Ignore — keep null, generic label is shown.
+      }
+    }
+    return _DetailPayload(report: report, reporterName: reporterName);
   }
 
   @override
@@ -52,7 +104,15 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               child: CircularProgressIndicator(color: AppColors.primary),
             );
           }
-          return _DetailBody(payload: snapshot.data!);
+          final report = snapshot.data!.report;
+          return _DetailBody(
+            payload: snapshot.data!,
+            isAdmin: _isAdmin,
+            // Owner may edit their OWN report only while it is still pending.
+            canEdit: report.userId == FirebaseAuth.instance.currentUser?.uid &&
+                report.status == ReportStatus.pending,
+            onUpdateStatus: _updateStatus,
+          );
         },
       ),
     );
@@ -61,13 +121,21 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
 class _DetailPayload {
   final CatReport report;
-  final UserProfile? reporter;
-  _DetailPayload({required this.report, required this.reporter});
+  final String? reporterName;
+  _DetailPayload({required this.report, required this.reporterName});
 }
 
 class _DetailBody extends StatelessWidget {
   final _DetailPayload payload;
-  const _DetailBody({required this.payload});
+  final bool isAdmin;
+  final bool canEdit;
+  final void Function(ReportStatus) onUpdateStatus;
+  const _DetailBody({
+    required this.payload,
+    required this.isAdmin,
+    required this.canEdit,
+    required this.onUpdateStatus,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -135,11 +203,65 @@ class _DetailBody extends StatelessWidget {
                     ConditionBadge(condition: r.condition),
                   ],
                 ),
+                const SizedBox(height: AppSpacing.stackSm),
+                // Labelled "Sighting status" to distinguish this single
+                // sighting from the cat's overall "Care status" (cat profile).
+                Text('Sighting status', style: AppText.labelCaps),
                 const SizedBox(height: AppSpacing.stackXs),
-                Text(
-                  'Status: ${r.status.label}',
-                  style: AppText.bodySm.copyWith(color: AppColors.outline),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: StatusBadge(status: r.status),
                 ),
+
+                const SizedBox(height: AppSpacing.stackLg),
+                StatusTimeline(status: r.status),
+
+                if (isAdmin) ...[
+                  const SizedBox(height: AppSpacing.stackLg),
+                  _SectionTitle(
+                    icon: Icons.admin_panel_settings_outlined,
+                    label: 'Update status (admin)',
+                  ),
+                  const SizedBox(height: AppSpacing.stackSm),
+                  Wrap(
+                    spacing: AppSpacing.stackSm,
+                    runSpacing: AppSpacing.stackSm,
+                    children: [
+                      for (final s in ReportStatus.values)
+                        ChoiceChip(
+                          label: Text(s.label),
+                          selected: r.status == s,
+                          showCheckmark: false,
+                          onSelected:
+                              r.status == s ? null : (_) => onUpdateStatus(s),
+                          selectedColor: AppColors.primaryContainer,
+                          labelStyle: AppText.labelCaps.copyWith(
+                            color: r.status == s
+                                ? AppColors.onPrimary
+                                : AppColors.onSurfaceVariant,
+                          ),
+                          backgroundColor: AppColors.secondaryContainer,
+                          side: BorderSide.none,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: AppRadius.pillRadius,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+
+                if (canEdit) ...[
+                  const SizedBox(height: AppSpacing.stackMd),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      // Reuse the submit form in edit mode (passes the report).
+                      onPressed: () => context.push('/report/new', extra: r),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit report'),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: AppSpacing.stackLg),
 
@@ -163,12 +285,20 @@ class _DetailBody extends StatelessWidget {
                   label: 'Location',
                 ),
                 const SizedBox(height: AppSpacing.stackSm),
-                StaticMap(point: r.location),
-                const SizedBox(height: 6),
-                Text(
-                  '${r.location.latitude.toStringAsFixed(5)}, '
-                  '${r.location.longitude.toStringAsFixed(5)}',
-                  style: AppText.labelCaps.copyWith(color: AppColors.outline),
+                GestureDetector(
+                  onTap: () => _openInMaps(
+                      r.location.latitude, r.location.longitude),
+                  child: StaticMap(point: r.location),
+                ),
+                const SizedBox(height: AppSpacing.stackSm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openInMaps(
+                        r.location.latitude, r.location.longitude),
+                    icon: const Icon(Icons.directions_outlined, size: 18),
+                    label: const Text('Open in Maps'),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.stackLg),
 
@@ -178,7 +308,9 @@ class _DetailBody extends StatelessWidget {
                       child: _MetaTile(
                         icon: Icons.person_outline,
                         label: 'Reporter',
-                        value: payload.reporter?.fullName ?? 'Unknown',
+                        value: payload.reporterName?.isNotEmpty == true
+                            ? payload.reporterName!
+                            : 'Community member',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.stackSm + 4),
@@ -254,7 +386,7 @@ class _MetaTile extends StatelessWidget {
                     value,
                     style: AppText.bodySm
                         .copyWith(fontWeight: FontWeight.w600),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -310,3 +442,14 @@ String _formatDate(DateTime when) {
   final month = local.month.toString().padLeft(2, '0');
   return '$day/$month/${local.year}';
 }
+
+/// Launch the device's maps app at [lat],[lng] (best-effort; silent on
+/// platforms without a maps handler).
+Future<void> _openInMaps(double lat, double lng) async {
+  final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+/// Horizontal lifecycle stepper: Pending → In progress → Resolved, with the
+/// current stage filled. A rejected report shows a dedicated banner instead.

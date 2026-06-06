@@ -17,7 +17,11 @@ import '../widgets/map_picker.dart';
 /// Submit Report screen — UC-05 / NAD-11.
 /// Matches `mockup-screens/report_cat_screen.png`.
 class SubmitReportScreen extends StatefulWidget {
-  const SubmitReportScreen({super.key});
+  /// When provided, the form EDITS this existing report (owner edit, UC-08) —
+  /// prefilled, updates instead of creating. Only the owner of a still-pending
+  /// report should be routed here (gated in UI + firestore.rules).
+  final CatReport? existing;
+  const SubmitReportScreen({super.key, this.existing});
 
   @override
   State<SubmitReportScreen> createState() => _SubmitReportScreenState();
@@ -44,6 +48,21 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
 
   bool _submitting = false;
   String? _submitError;
+
+  bool get _isEditing => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.existing;
+    if (r != null) {
+      _photoUrl = r.photoUrl;
+      _location = r.location;
+      _condition = r.condition;
+      _descriptionController.text = r.description;
+      _locationLabelController.text = r.locationLabel ?? '';
+    }
+  }
 
   @override
   void dispose() {
@@ -160,8 +179,25 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     });
 
     try {
+      // Owner edit (UC-08): update content in place, keep status/owner/cat.
+      if (_isEditing) {
+        await _reportsService.updateReport(
+          reportId: widget.existing!.id,
+          photoUrl: _photoUrl!,
+          location: _location!,
+          condition: _condition!,
+          description: _descriptionController.text.trim(),
+          locationLabel: _locationLabelController.text.trim().isEmpty
+              ? null
+              : _locationLabelController.text.trim(),
+        );
+        if (!mounted) return;
+        context.go('${AppRoutes.reportDetail}/${widget.existing!.id}');
+        return;
+      }
       final report = await _reportsService.createReport(
         userId: user.uid,
+        reporterName: user.displayName,
         photoUrl: _photoUrl!,
         location: _location!,
         condition: _condition!,
@@ -188,7 +224,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
           icon: const Icon(Icons.chevron_left),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Report Stray Cat'),
+        title: Text(_isEditing ? 'Edit Report' : 'Report Stray Cat'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -271,7 +307,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                             color: AppColors.onPrimary,
                           ),
                         )
-                      : const Text('Submit Report'),
+                      : Text(_isEditing ? 'Save Changes' : 'Submit Report'),
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
               ],
