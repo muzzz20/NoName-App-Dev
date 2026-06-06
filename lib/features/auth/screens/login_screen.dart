@@ -43,7 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      // Router redirect will move us to /home once authStateChanges fires.
+      // Navigate explicitly. The router redirect alone can miss the first
+      // authStateChanges emission and leave the user stuck on /login;
+      // pushing /home here makes sign-in deterministic.
+      context.go(AppRoutes.home);
     } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
@@ -85,9 +88,19 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppSpacing.stackXl),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back to browsing',
+                    onPressed: () => context.canPop()
+                        ? context.pop()
+                        : context.go(AppRoutes.home),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.stackMd),
                 Text(
-                  'Welcome Back',
+                  'Welcome',
                   style: AppText.headlineMd.copyWith(color: AppColors.primary),
                   textAlign: TextAlign.center,
                 ),
@@ -175,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: AppText.bodySm.copyWith(color: AppColors.outline),
                     ),
                     GestureDetector(
-                      onTap: () => context.go(AppRoutes.register),
+                      onTap: () => context.push(AppRoutes.register),
                       child: Text(
                         'Register',
                         style: AppText.bodySm.copyWith(

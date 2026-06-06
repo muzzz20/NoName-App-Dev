@@ -77,7 +77,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                       ),
                       const SizedBox(height: AppSpacing.stackLg),
                       ElevatedButton(
-                        onPressed: () => context.push('/home'),
+                        onPressed: () => context.go('/campaigns'),
                         child: const Text('Browse Campaigns'),
                       ),
                     ],
@@ -98,7 +98,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                           Text('Total Donated', style: AppText.labelCaps),
                           const SizedBox(height: AppSpacing.stackSm),
                           Text(
-                            'RM ${totalDonated.toStringAsFixed(0)}',
+                            'RM ${totalDonated.toStringAsFixed(2)}',
                             style: AppText.displayLg.copyWith(color: AppColors.primary),
                           ),
                         ],
@@ -115,13 +115,11 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                           final campaignName = nameSnapshot.data ?? 'Loading...';
                           return GestureDetector(
                             onTap: () {
-                              if (donation.status == DonationStatus.success) {
-                                context.push('/receipt', extra: {
-                                  'campaignName': campaignName,
-                                  'amount': donation.amountSen / 100,
-                                  'transactionId': donation.transactionId,
-                                  'date': donation.createdAt,
-                                });
+                              if (donation.status == DonationStatus.success &&
+                                  donation.stripeSessionId != null) {
+                                context.push(
+                                  '/receipt?session_id=${donation.stripeSessionId}',
+                                );
                               }
                             },
                             child: Container(
@@ -172,7 +170,7 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        'RM ${(donation.amountSen / 100).toStringAsFixed(0)}',
+                                        'RM ${(donation.amountSen / 100).toStringAsFixed(2)}',
                                         style: AppText.titleSm,
                                       ),
                                       if (donation.status != DonationStatus.success)
