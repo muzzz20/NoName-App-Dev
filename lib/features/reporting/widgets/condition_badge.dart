@@ -13,23 +13,36 @@ import '../models/cat_report.dart';
 /// - Sick    → primaryContainer (UTM Maroon variant)
 class ConditionBadge extends StatelessWidget {
   final CatCondition condition;
-  const ConditionBadge({super.key, required this.condition});
+
+  /// Compact variant for dense surfaces (e.g. overlaid on a thumbnail in
+  /// [ReportCard]): tighter padding and smaller caps.
+  final bool compact;
+
+  const ConditionBadge({
+    super.key,
+    required this.condition,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final (bg, fg) = _palette(condition);
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.stackSm + 4,
-        vertical: 4,
-      ),
+      padding: compact
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+          : const EdgeInsets.symmetric(
+              horizontal: AppSpacing.stackSm + 4,
+              vertical: 4,
+            ),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: AppRadius.pillRadius,
       ),
       child: Text(
         condition.label.toUpperCase(),
-        style: AppText.labelCaps.copyWith(color: fg),
+        style: compact
+            ? AppText.labelCaps.copyWith(color: fg, fontSize: 10)
+            : AppText.labelCaps.copyWith(color: fg),
       ),
     );
   }

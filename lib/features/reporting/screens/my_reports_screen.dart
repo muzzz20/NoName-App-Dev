@@ -59,10 +59,23 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
             return Center(
               child: Padding(
                 padding: AppSpacing.pagePadding,
-                child: Text(
-                  'Could not load your reports.\n${snapshot.error}',
-                  style: AppText.bodySm.copyWith(color: AppColors.error),
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined,
+                        size: 56, color: AppColors.outline),
+                    const SizedBox(height: AppSpacing.stackMd),
+                    Text("Couldn't load your reports",
+                        style: AppText.titleSm, textAlign: TextAlign.center),
+                    const SizedBox(height: AppSpacing.stackSm),
+                    Text('Check your connection and try again.',
+                        style:
+                            AppText.bodySm.copyWith(color: AppColors.outline),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: AppSpacing.stackLg),
+                    FilledButton(
+                        onPressed: _refresh, child: const Text('Retry')),
+                  ],
                 ),
               ),
             );

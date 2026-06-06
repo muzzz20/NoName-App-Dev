@@ -5,6 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text.dart';
 import '../models/cat_report.dart';
 import 'condition_badge.dart';
+import 'status_badge.dart';
 
 /// Reusable list-tile card for a [CatReport]. Used by Feed (NAD-12) and
 /// My Reports (NAD-14).
@@ -30,61 +31,67 @@ class ReportCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.stackSm + 4),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: AppRadius.cardRadius,
-                child: SizedBox(
-                  width: 76,
-                  height: 76,
-                  child: report.photoUrl.isEmpty
-                      ? _PhotoFallback()
-                      : Image.network(
-                          report.photoUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _PhotoFallback(),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: AppColors.surfaceContainer,
-                              alignment: Alignment.center,
-                              child: const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
+              SizedBox(
+                width: 84,
+                height: 84,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        child: report.photoUrl.isEmpty
+                            ? _PhotoFallback()
+                            : Image.network(
+                                report.photoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => _PhotoFallback(),
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return Container(
+                                    color: AppColors.surfaceContainer,
+                                    alignment: Alignment.center,
+                                    child: const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: ConditionBadge(
+                        condition: report.condition,
+                        compact: true,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: AppSpacing.stackMd),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            report.locationLabel?.isNotEmpty == true
-                                ? report.locationLabel!
-                                : _formatLatLng(report),
-                            style: AppText.bodyBase.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.stackSm),
-                        ConditionBadge(condition: report.condition),
-                      ],
+                    Text(
+                      report.locationLabel?.isNotEmpty == true
+                          ? report.locationLabel!
+                          : _formatLatLng(report),
+                      style: AppText.bodyBase.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (report.description.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         report.description,
                         style: AppText.bodySm.copyWith(
@@ -95,7 +102,7 @@ class ReportCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(
@@ -111,12 +118,18 @@ class ReportCard extends StatelessWidget {
                         ),
                         if (showStatusBadge) ...[
                           const SizedBox(width: AppSpacing.stackMd),
-                          _StatusPill(status: report.status),
+                          StatusBadge(status: report.status, compact: true),
                         ],
                       ],
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: AppSpacing.stackSm),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.outline,
+                size: 20,
               ),
             ],
           ),
@@ -128,41 +141,6 @@ class ReportCard extends StatelessWidget {
   String _formatLatLng(CatReport r) =>
       '${r.location.latitude.toStringAsFixed(4)}, '
       '${r.location.longitude.toStringAsFixed(4)}';
-}
-
-class _StatusPill extends StatelessWidget {
-  final ReportStatus status;
-  const _StatusPill({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, fg) = switch (status) {
-      ReportStatus.pending => (
-          AppColors.surfaceContainerHigh,
-          AppColors.onSurfaceVariant,
-        ),
-      ReportStatus.inProgress => (
-          AppColors.primaryContainer,
-          AppColors.onPrimary,
-        ),
-      ReportStatus.resolved => (
-          AppColors.tertiaryContainer,
-          AppColors.onTertiaryContainer,
-        ),
-      ReportStatus.rejected => (
-          AppColors.errorContainer,
-          AppColors.onErrorContainer,
-        ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: AppRadius.pillRadius),
-      child: Text(
-        status.label.toUpperCase(),
-        style: AppText.labelCaps.copyWith(color: fg, fontSize: 10),
-      ),
-    );
-  }
 }
 
 class _PhotoFallback extends StatelessWidget {
